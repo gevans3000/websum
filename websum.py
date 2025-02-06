@@ -100,6 +100,70 @@ class RateLimiter:
             await asyncio.sleep(self.delay - elapsed)
         self.last_request = time.time()
 
+class URLCache:
+    """Simple cache to track processed URLs"""
+    def __init__(self, cache_file='url_cache.json', enabled=True):
+        self.cache_file = cache_file
+        self.enabled = enabled
+        self.cache = self._load_cache()
+        
+    def _load_cache(self):
+        """Load cache from file"""
+        try:
+            with open(self.cache_file, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+            
+    def _save_cache(self):
+        """Save cache to file"""
+        if self.enabled:
+            with open(self.cache_file, 'w') as f:
+                json.dump(self.cache, f, indent=2)
+            
+    def add_url(self, url):
+        """Add URL to cache with timestamp"""
+        if self.enabled:
+            self.cache[url] = {
+                'timestamp': datetime.datetime.now().isoformat(),
+                'count': self.cache.get(url, {}).get('count', 0) + 1
+            }
+            self._save_cache()
+        
+    def has_url(self, url):
+        """Check if URL is in cache"""
+        return url in self.cache if self.enabled else False
+        
+    def get_stats(self):
+        """Get cache statistics"""
+        if not isinstance(self.cache, dict):
+            self.cache = {}  # Reset if invalid
+        return {
+            'total_urls': len(self.cache),
+            'total_visits': sum(item.get('count', 0) for item in self.cache.values())
+        }
+        
+    def merge(self, other_cache_file):
+        """Merge another cache file into this one"""
+        try:
+            with open(other_cache_file, 'r') as f:
+                other_cache = json.load(f)
+            
+            # Merge entries
+            for url, data in other_cache.items():
+                if url in self.cache:
+                    # Update count if URL exists
+                    self.cache[url]['count'] += data.get('count', 1)
+                else:
+                    # Add new URL
+                    self.cache[url] = data
+            
+            self._save_cache()
+            return len(other_cache)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Error merging cache file {other_cache_file}: {e}")
+            return 0
+
 def ensure_url_scheme(url):
     """Ensure URL has a proper scheme"""
     if not url.startswith(('http://', 'https://')):
@@ -246,12 +310,14 @@ def sanitize_filename(url):
     
     return clean_parts
 
-def save_readable_text(markdown_content, output_path):
+def save_readable_text(markdown_content, output_path, include_links=True, include_sections=True):
     """
     Extract and save clean readable text from markdown content.
     Args:
         markdown_content (str): The markdown content to process
         output_path (str): Path to save the readable text file
+        include_links (bool): Whether to include links as a list at the end
+        include_sections (bool): Whether to add section breaks (---)
     """
     if not markdown_content:
         return
@@ -263,8 +329,18 @@ def save_readable_text(markdown_content, output_path):
     text = re.sub(r'```[^`]*```', '', text)  # Remove multi-line code blocks
     text = re.sub(r'`[^`]+`', '', text)  # Remove inline code
     
-    # Remove links but keep text
-    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    # Handle links based on preference
+    if include_links:
+        # Convert links to text with footnotes
+        links = []
+        def link_replace(match):
+            text, url = match.groups()
+            links.append(url)
+            return f"{text} [{len(links)}]"
+        text = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', link_replace, text)
+    else:
+        # Just keep link text, remove URLs
+        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
     
     # Remove headers and formatting
     text = re.sub(r'#{1,6}\s+', '', text)  # Remove headers
@@ -280,8 +356,15 @@ def save_readable_text(markdown_content, output_path):
     text = re.sub(r'\n{3,}', '\n\n', text)  # Normalize multiple newlines
     text = re.sub(r'[ \t]+', ' ', text)  # Normalize spaces and tabs
     
-    # Add section breaks for readability
-    text = re.sub(r'\n\n+', '\n\n---\n\n', text)  # Add section breaks
+    # Add section breaks if requested
+    if include_sections:
+        text = re.sub(r'\n\n+', '\n\n---\n\n', text)
+    
+    # Add collected links as footnotes
+    if include_links and links:
+        text += '\n\nReferences:\n'
+        for i, url in enumerate(links, 1):
+            text += f'[{i}] {url}\n'
     
     # Save the clean text
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -368,6 +451,14 @@ async def main():
     parser.add_argument('--page-limit', type=int, help='Maximum number of pages to crawl')
     parser.add_argument('--rate-limit', type=float, default=1.0, 
                       help='Minimum delay between requests in seconds')
+    parser.add_argument('--no-cache', action='store_true',
+                      help='Disable URL caching (process all URLs even if seen before)')
+    parser.add_argument('--cache-file', default='url_cache.json',
+                      help='File to store URL cache (default: url_cache.json)')
+    parser.add_argument('--merge-cache', 
+                      help='Merge another cache file into the current cache')
+    parser.add_argument('--include-links', action='store_true', help='Include links in readable text output')
+    parser.add_argument('--include-sections', action='store_true', help='Add section breaks in readable text output')
     args = parser.parse_args()
     
     # Configure logging
@@ -375,6 +466,16 @@ async def main():
         logger.setLevel(logging.DEBUG)
         logger.debug("Debug mode enabled")
         logger.debug(f"Rate limit: {args.rate_limit} seconds")
+    
+    # Handle cache merge if requested
+    if args.merge_cache:
+        cache = URLCache(cache_file=args.cache_file)
+        merged_count = cache.merge(args.merge_cache)
+        logger.info(f"Merged {merged_count} URLs from {args.merge_cache}")
+        if args.debug:
+            stats = cache.get_stats()
+            logger.debug(f"Cache now contains {stats['total_urls']} URLs with {stats['total_visits']} total visits")
+        return 0
     
     # Initialize progress tracking
     progress = CrawlProgress(page_limit=args.page_limit)
@@ -444,7 +545,7 @@ async def main():
             
             # Save readable text
             readable_text_file = os.path.join(args.output_dir, 'readable_text.txt')
-            save_readable_text(result.markdown, readable_text_file)
+            save_readable_text(result.markdown, readable_text_file, include_links=args.include_links, include_sections=args.include_sections)
             
             if args.debug:
                 logger.debug(f"Readable text saved to {readable_text_file}")
@@ -452,8 +553,19 @@ async def main():
             # Process links
             to_process = [(link, 1) for link in links]
             rate_limiter = RateLimiter(delay_seconds=args.rate_limit)
+            url_cache = URLCache(cache_file=args.cache_file, enabled=not args.no_cache)
+            
+            if args.debug and not args.no_cache:
+                stats = url_cache.get_stats()
+                logger.debug(f"URL cache loaded: {stats['total_urls']} URLs, {stats['total_visits']} total visits")
+            
             while to_process and progress.should_process_more():
                 link, depth = to_process.pop(0)
+                if url_cache.has_url(link):
+                    if args.debug:
+                        logger.debug(f"Skipping cached URL: {link}")
+                    continue
+                url_cache.add_url(link)
                 await rate_limiter.wait()
                 success, new_links = await process_page(link, depth, args.depth, crawler, progress, args.output_dir, debug=args.debug)
                 if success:

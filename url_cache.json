@@ -1,0 +1,150 @@
+{
+  "https://docs.crawl4ai.com": {
+    "timestamp": "2025-02-06T13:01:26.639577",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/advanced-features": {
+    "timestamp": "2025-02-06T13:01:27.700707",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/crawl-dispatcher": {
+    "timestamp": "2025-02-06T13:01:41.696662",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/file-downloading": {
+    "timestamp": "2025-02-06T13:01:42.699277",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/hooks-auth": {
+    "timestamp": "2025-02-06T13:06:17.511487",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/identity-based-crawling": {
+    "timestamp": "2025-02-06T13:06:18.652909",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/test1": {
+    "timestamp": "2025-02-06T13:00:00",
+    "count": 4
+  },
+  "https://docs.crawl4ai.com/test2": {
+    "timestamp": "2025-02-06T13:01:00",
+    "count": 2
+  },
+  "https://docs.crawl4ai.com/advanced/lazy-loading": {
+    "timestamp": "2025-02-06T13:23:18.788041",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/multi-url-crawling": {
+    "timestamp": "2025-02-06T13:23:19.904062",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/proxy-security": {
+    "timestamp": "2025-02-06T13:23:21.171718",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/session-management": {
+    "timestamp": "2025-02-06T13:23:22.301101",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/advanced/ssl-certificate": {
+    "timestamp": "2025-02-06T13:23:23.487424",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/api/arun": {
+    "timestamp": "2025-02-06T13:23:24.668603",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/api/arun_many": {
+    "timestamp": "2025-02-06T13:23:25.910701",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/api/async-webcrawler": {
+    "timestamp": "2025-02-06T13:23:27.088179",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/api/crawl-result": {
+    "timestamp": "2025-02-06T13:23:28.278518",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/api/parameters": {
+    "timestamp": "2025-02-06T13:23:29.530565",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/api/strategies": {
+    "timestamp": "2025-02-06T13:23:30.726825",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/blog": {
+    "timestamp": "2025-02-06T13:23:31.937178",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/browser-crawler-config": {
+    "timestamp": "2025-02-06T13:23:32.968881",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/cache-modes": {
+    "timestamp": "2025-02-06T13:23:34.164225",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/content-selection": {
+    "timestamp": "2025-02-06T13:23:35.292803",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/crawler-result": {
+    "timestamp": "2025-02-06T13:23:36.609656",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/docker-deploymeny": {
+    "timestamp": "2025-02-06T13:23:37.804294",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/fit-markdown": {
+    "timestamp": "2025-02-06T13:23:39.222351",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/installation": {
+    "timestamp": "2025-02-06T13:23:40.411866",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/link-media": {
+    "timestamp": "2025-02-06T13:23:41.552262",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/local-files": {
+    "timestamp": "2025-02-06T13:23:42.788553",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/markdown-generation": {
+    "timestamp": "2025-02-06T13:23:43.955287",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/page-interaction": {
+    "timestamp": "2025-02-06T13:23:45.314343",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/quickstart": {
+    "timestamp": "2025-02-06T13:23:46.458402",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/core/simple-crawling": {
+    "timestamp": "2025-02-06T13:23:47.790450",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/extraction/chunking": {
+    "timestamp": "2025-02-06T13:23:48.956042",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/extraction/clustring-strategies": {
+    "timestamp": "2025-02-06T13:23:50.129682",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/extraction/llm-strategies": {
+    "timestamp": "2025-02-06T13:23:51.303917",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/extraction/no-llm-strategies": {
+    "timestamp": "2025-02-06T13:23:52.553522",
+    "count": 1
+  }
+}
