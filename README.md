@@ -1,93 +1,110 @@
-# WebSum - Web Scraping Tool
+# WebSum: Website Content Collector 📚
 
-## 📋 Table of Contents
-- [✨ Features](#-features)
-- [🚀 Installation Guide](#-installation-guide)
-- [🛠️ Basic Usage](#️-basic-usage)
-- [📂 Output Structure](#-output-structure)
-- [❓ FAQ](#-faq)
-- [⚠️ Troubleshooting](#️-troubleshooting)
+WebSum helps you save website content for offline reading or research. Think of it like a smart camera that can take snapshots of web pages and organize them neatly on your computer.
 
-## ✨ Features
-- Extract clean markdown from web pages
-- Follow up to 3 links automatically
-- Save results in organized folders
-- Remove headers/footers automatically
+## What Does It Do? 🤔
 
-## 🚀 Installation Guide
+1. **Collects Content**: Takes snapshots of web pages you're interested in
+2. **Follows Links**: Can automatically visit links on the pages (like clicking through a website)
+3. **Saves Everything Neatly**: Creates organized folders with:
+   - Clean, readable text files
+   - Complete page content (for advanced users)
+   - Links found on each page
 
-### Prerequisites
-1. Install [Python 3.10+](https://www.python.org/downloads/)
-   - Check installation: `python --version`
-2. (Recommended) Create virtual environment:
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate  # Windows
-   source venv/bin/activate  # Mac/Linux
-   ```
+## Getting Started 🚀
 
-### Installation Steps
-1. Clone repository:
-   ```bash
-   git clone https://github.com/yourusername/websum.git
-   cd websum
-   ```
-2. Install requirements:
-   ```bash
-   pip install crawl4ai
-   ```
+### 1. Install Python
+- Download Python from [python.org](https://python.org)
+- During installation, check "Add Python to PATH"
 
-## 🛠️ Basic Usage
+### 2. Install WebSum
+Open Command Prompt (cmd) and type:
 ```bash
-python websum.py [URL] [MAX_LINKS]
+pip install -r requirements.txt
 ```
 
-### Examples
-1. Basic usage (3 links):
-   ```bash
-   python websum.py https://example.com
-   ```
-2. Get 5 links:
-   ```bash
-   python websum.py https://example.com 5
-   ```
-3. Save to custom location:
-   ```bash
-   python websum.py https://example.com
-   # Output saved to 'scraped_data/[timestamp]'
-   ```
+## How to Use 💡
 
-## 📂 Output Structure
+### Basic Usage
+Open Command Prompt in the WebSum folder and type:
+```bash
+python websum.py website-address
 ```
-scraped_data/
-└── 20240205_141543/          # Timestamp
-    ├── base_page.md         # Main page content
-    ├── link_1.md           # First linked page
-    └── link_2.md           # Second linked page
+Example:
+```bash
+python websum.py docs.python.org/tutorial
 ```
 
-## ❓ FAQ
-**Q:** How do I know if Python is installed correctly?
-> Run `python --version` in your terminal. You should see 3.10 or higher.
+### Control How Much to Download
 
-**Q:** What if I get permission errors?
-> Try running as administrator: Right-click Command Prompt > "Run as administrator"
+#### Depth (How Far to Click)
+`--depth 2` means:
+- Visit the starting page
+- Click links on that page
+- Click links on those pages
+```bash
+python websum.py docs.python.org/tutorial --depth 2
+```
 
-**Q:** Where can I learn more about web scraping?
-> - [Beautiful Soup Documentation](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
-> - [Scrapy Tutorial](https://docs.scrapy.org/en/latest/intro/tutorial.html)
+#### Page Limit (How Many Pages)
+`--page-limit 5` means:
+- Stop after downloading 5 pages
+```bash
+python websum.py docs.python.org/tutorial --page-limit 5
+```
 
-## ⚠️ Troubleshooting
-| Error | Solution |
-|-------|----------|
-| ModuleNotFoundError | Run `pip install -r requirements.txt` |
-| Invalid URL | Add http:// prefix (e.g. `http://example.com`) |
-| Empty output | Check if website blocks scrapers |
+#### Be Nice to Websites
+`--rate-limit 2` means:
+- Wait 2 seconds between downloading pages
+```bash
+python websum.py docs.python.org/tutorial --rate-limit 2
+```
 
-## 🤝 Support
-For additional help:
-- [Python Virtual Environments Guide](https://docs.python.org/3/tutorial/venv.html)
-- [crawl4ai Documentation](https://pypi.org/project/crawl4ai/)
+### See What's Happening
+Add `--debug` to see detailed progress:
+```bash
+python websum.py docs.python.org/tutorial --debug
+```
 
----
-📝 License: MIT | ⚠️ Use responsibly | 🕵️ Respect robots.txt
+## Where to Find Your Downloads 📁
+
+- Look for a folder called `scraped_data`
+- Inside, you'll find folders named with dates (like `20250206_124442`)
+- Each folder contains:
+  - `readable_text.txt`: Easy-to-read content
+  - `content.json`: Complete data (for advanced users)
+
+## Examples 📝
+
+### Download a Few Tutorial Pages
+```bash
+python websum.py docs.python.org/tutorial --depth 1 --page-limit 3
+```
+This will:
+- Start at the tutorial page
+- Download up to 3 pages
+- Only follow direct links (depth 1)
+
+### Download Documentation Carefully
+```bash
+python websum.py docs.python.org/tutorial --depth 2 --page-limit 10 --rate-limit 1
+```
+This will:
+- Download up to 10 pages
+- Follow links two clicks deep
+- Wait 1 second between pages
+
+## Need Help? ❓
+
+If you see error messages or need help:
+1. Make sure you typed the website address correctly
+2. Try adding `--debug` to see more details
+3. Start with small numbers for `--depth` and `--page-limit`
+
+## Safety Tips 🛡️
+
+1. Always be respectful of websites:
+   - Use `--rate-limit` to avoid downloading too quickly
+   - Start with small `--page-limit` values
+2. Some websites might not allow downloading content
+3. Be careful with depth values - larger numbers can download many pages!
