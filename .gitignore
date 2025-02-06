@@ -1,0 +1,27 @@
+# Ignore scraped data outputs
+scraped_data/
+
+# Python development artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Environment files
+.env
+.venv
+venv/
+
+# Editor files
+.vscode/
+.idea/
+
+# Log files
+*.log
+logs/
+
+# Local development files
+*.swp
+*.swo
+*~
