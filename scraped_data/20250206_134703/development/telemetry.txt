@@ -1,0 +1,94 @@
+Browser Use home page![light logo [1]!dark logo [2]](https://docs.browser-use.com/development/<https:/browser-use.com>)
+Search or ask...
+Ctrl K
+Search...
+Navigation
+Development
+Telemetry
+Documentation [3]Cloud API [4]
+Get Started
+ Introduction [5]
+ Quickstart [6]
+
+---
+
+Customize
+ Supported Models [7]
+ Agent Settings [8]
+ Browser Settings [9]
+ Connect to your Browser [10]
+ Output Format [11]
+ System Prompt [12]
+ Sensitive Data [13]
+ Custom Functions [14]
+
+---
+
+Development
+ Local Setup [15]
+ Telemetry [16]
+ Observability [17]
+ Roadmap [18]
+
+---
+
+​ [19]
+Overview
+Browser Use collects anonymous usage data to help us understand how the library is being used and to improve the user experience. It also helps us fix bugs faster and prioritize feature development.
+​ [20]
+Data Collection
+We use for telemetry collection. The data is completely anonymized and contains no personally identifiable information.
+We never collect personal information, credentials, or specific content from your browser automation tasks.
+​ [21]
+Opting Out
+You can disable telemetry by setting an environment variable:
+.env
+Copy
+
+---
+
+Or in your Python code:
+Copy
+
+---
+
+Even when enabled, telemetry has zero impact on the library’s performance or functionality. Code is available in .
+Was this page helpful?
+YesNo
+Local Setup [22]Observability [23]
+On this page
+ Overview [24]
+ Data Collection [25]
+• Opting Out [26]
+
+---
+
+
+
+References:
+[1] https://mintlify.s3.us-west-1.amazonaws.com/browseruse-0aece648/logo/light.svg
+[2] https://mintlify.s3.us-west-1.amazonaws.com/browseruse-0aece648/logo/dark.svg
+[3] https://docs.browser-use.com/development/</introduction>
+[4] https://docs.browser-use.com/development/</cloud/quickstart>
+[5] https://docs.browser-use.com/development/</introduction>
+[6] https://docs.browser-use.com/development/</quickstart>
+[7] https://docs.browser-use.com/development/</customize/supported-models>
+[8] https://docs.browser-use.com/development/</customize/agent-settings>
+[9] https://docs.browser-use.com/development/</customize/browser-settings>
+[10] https://docs.browser-use.com/development/</customize/real-browser>
+[11] https://docs.browser-use.com/development/</customize/output-format>
+[12] https://docs.browser-use.com/development/</customize/system-prompt>
+[13] https://docs.browser-use.com/development/</customize/sensitive-data>
+[14] https://docs.browser-use.com/development/</customize/custom-functions>
+[15] https://docs.browser-use.com/development/</development/local-setup>
+[16] https://docs.browser-use.com/development/</development/telemetry>
+[17] https://docs.browser-use.com/development/</development/observability>
+[18] https://docs.browser-use.com/development/</development/roadmap>
+[19] https://docs.browser-use.com/development/<#overview>
+[20] https://docs.browser-use.com/development/<#data-collection>
+[21] https://docs.browser-use.com/development/<#opting-out>
+[22] https://docs.browser-use.com/development/</development/local-setup>
+[23] https://docs.browser-use.com/development/</development/observability>
+[24] https://docs.browser-use.com/development/<#overview>
+[25] https://docs.browser-use.com/development/<#data-collection>
+[26] https://docs.browser-use.com/development/<#opting-out>

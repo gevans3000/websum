@@ -1,17 +1,28 @@
-# WebSum: Website Content Collector 📚
+# WebSum: Smart Web Content Collector and Knowledge Base 
 
-WebSum helps you save website content for offline reading or research. Think of it like a smart camera that can take snapshots of web pages and organize them neatly on your computer.
+WebSum helps you collect and organize web content into a structured knowledge base. It's like having a smart research assistant that not only saves web pages but also organizes them for both human reading and AI understanding.
 
-## What Does It Do? 🤔
+## What Does It Do? 
 
-1. **Collects Content**: Takes snapshots of web pages you're interested in
-2. **Follows Links**: Can automatically visit links on the pages (like clicking through a website)
-3. **Saves Everything Neatly**: Creates organized folders with:
-   - Clean, readable text files
-   - Complete page content (for advanced users)
-   - Links found on each page
+1. **Smart Content Collection**:
+   - Takes snapshots of web pages
+   - Extracts clean, readable content
+   - Preserves code examples and technical details
+   - Follows links automatically
 
-## Getting Started 🚀
+2. **Knowledge Base Organization**:
+   - Creates categorized folders
+   - Generates AI-friendly documentation
+   - Preserves technical context and relationships
+   - Links related content together
+
+3. **Enhanced Metadata**:
+   - Extracts technical terms
+   - Identifies programming languages
+   - Preserves code examples
+   - Maintains cross-references
+
+## Getting Started 
 
 ### 1. Install Python
 - Download Python from [python.org](https://python.org)
@@ -23,10 +34,9 @@ Open Command Prompt (cmd) and type:
 pip install -r requirements.txt
 ```
 
-## How to Use 💡
+## How to Use 
 
 ### Basic Usage
-Open Command Prompt in the WebSum folder and type:
 ```bash
 python websum.py website-address
 ```
@@ -35,76 +45,184 @@ Example:
 python websum.py docs.python.org/tutorial
 ```
 
-### Control How Much to Download
+### Creating a Knowledge Base 
 
-#### Depth (How Far to Click)
-`--depth 2` means:
-- Visit the starting page
-- Click links on that page
-- Click links on those pages
+#### Basic Knowledge Base Entry
+```bash
+python websum.py docs.example.com/page --kb-root knowledge_base --kb-category python/tutorials
+```
+This will:
+- Create a knowledge base in the `knowledge_base` directory
+- Organize content under the `python/tutorials` category
+- Generate an AI-friendly markdown file
+
+#### Add Metadata
+```bash
+python websum.py docs.example.com/page \
+  --kb-root knowledge_base \
+  --kb-category python/tutorials \
+  --kb-title "Python Lists Tutorial" \
+  --kb-summary "Complete guide to Python lists and list operations" \
+  --kb-keywords "python,lists,tutorial,programming"
+```
+
+### Control What to Download 
+
+#### Depth Control
 ```bash
 python websum.py docs.python.org/tutorial --depth 2
 ```
+- `--depth 2`: Follow links up to 2 clicks deep
+- `--depth 1`: Only direct links
+- `--depth 0`: Just the specified page
 
-#### Page Limit (How Many Pages)
-`--page-limit 5` means:
-- Stop after downloading 5 pages
+#### Page Limits
 ```bash
 python websum.py docs.python.org/tutorial --page-limit 5
 ```
+- `--page-limit 5`: Stop after 5 pages
+- Good for testing or small collections
 
-#### Be Nice to Websites
-`--rate-limit 2` means:
-- Wait 2 seconds between downloading pages
+#### Rate Limiting
 ```bash
 python websum.py docs.python.org/tutorial --rate-limit 2
 ```
+- `--rate-limit 2`: Wait 2 seconds between pages
+- Be nice to websites!
 
-### See What's Happening
-Add `--debug` to see detailed progress:
+### Debug Mode
 ```bash
 python websum.py docs.python.org/tutorial --debug
 ```
+- Shows detailed progress
+- Helpful for troubleshooting
 
-## Where to Find Your Downloads 📁
+## Knowledge Base Structure 
 
-- Look for a folder called `scraped_data`
-- Inside, you'll find folders named with dates (like `20250206_124442`)
-- Each folder contains:
-  - `readable_text.txt`: Easy-to-read content
-  - `content.json`: Complete data (for advanced users)
-
-## Examples 📝
-
-### Download a Few Tutorial Pages
-```bash
-python websum.py docs.python.org/tutorial --depth 1 --page-limit 3
+### Directory Organization
 ```
-This will:
-- Start at the tutorial page
-- Download up to 3 pages
-- Only follow direct links (depth 1)
-
-### Download Documentation Carefully
-```bash
-python websum.py docs.python.org/tutorial --depth 2 --page-limit 10 --rate-limit 1
+knowledge_base/
+├── python/
+│   ├── tutorials/
+│   │   └── python_lists_tutorial.md
+│   └── advanced/
+│       └── python_decorators_guide.md
+└── javascript/
+    └── basics/
+        └── javascript_functions_tutorial.md
 ```
-This will:
-- Download up to 10 pages
-- Follow links two clicks deep
-- Wait 1 second between pages
 
-## Need Help? ❓
+### File Format
+Each `.md` file contains:
+1. **Document Metadata**
+   - Title and source URL
+   - Category and keywords
+   - Last modified date
 
-If you see error messages or need help:
-1. Make sure you typed the website address correctly
-2. Try adding `--debug` to see more details
-3. Start with small numbers for `--depth` and `--page-limit`
+2. **Quick Summary**
+   - Overview of the content
+   - Main learning points
 
-## Safety Tips 🛡️
+3. **Technical Context**
+   - Programming languages used
+   - Key technical terms
+   - Required dependencies
 
-1. Always be respectful of websites:
-   - Use `--rate-limit` to avoid downloading too quickly
+4. **Main Content**
+   - Clean, formatted text
+   - Code examples with language tags
+   - Step-by-step instructions
+   - Important notes and warnings
+
+5. **Related Resources**
+   - Links to related pages
+   - References and citations
+
+## Examples 
+
+### Create a Python Tutorial Knowledge Base
+```bash
+# Download Python tutorial with metadata
+python websum.py docs.python.org/tutorial/introduction \
+  --kb-root python_tutorials \
+  --kb-category basics \
+  --kb-title "Introduction to Python" \
+  --kb-summary "Getting started with Python programming" \
+  --kb-keywords "python,beginner,tutorial" \
+  --depth 1 \
+  --page-limit 5
+```
+
+### Build a Technical Documentation Library
+```bash
+# Download API documentation
+python websum.py api.example.com/docs \
+  --kb-root api_docs \
+  --kb-category rest_api \
+  --kb-title "REST API Reference" \
+  --kb-summary "Complete API documentation with examples" \
+  --kb-keywords "api,rest,reference" \
+  --depth 2 \
+  --rate-limit 1
+```
+
+## Tips for Success 
+
+### Knowledge Base Organization
+1. **Use Clear Categories**:
+   - `language/topic` (e.g., `python/basics`)
+   - `framework/feature` (e.g., `react/hooks`)
+   - `platform/guide` (e.g., `aws/lambda`)
+
+2. **Descriptive Titles**:
+   - Include the main topic
+   - Mention the type (tutorial, guide, reference)
+   - Keep it concise
+
+3. **Helpful Summaries**:
+   - What will readers learn?
+   - Who is it for?
+   - What prerequisites are needed?
+
+### Best Practices 
+
+1. **Be Respectful**:
+   - Use `--rate-limit` to avoid overwhelming servers
    - Start with small `--page-limit` values
-2. Some websites might not allow downloading content
-3. Be careful with depth values - larger numbers can download many pages!
+   - Check website's terms of service
+
+2. **Organize Thoughtfully**:
+   - Create logical category hierarchies
+   - Use consistent naming
+   - Add helpful metadata
+
+3. **Test First**:
+   - Start with `--depth 1` and small limits
+   - Use `--debug` to see what's happening
+   - Verify content quality before large downloads
+
+## Need Help? 
+
+If you encounter issues:
+1. Check command syntax carefully
+2. Use `--debug` for detailed information
+3. Start with minimal options and add more as needed
+4. Verify URLs are accessible
+5. Check your internet connection
+
+## Safety Tips 
+
+1. **Website Courtesy**:
+   - Always use rate limiting
+   - Respect robots.txt
+   - Don't overload servers
+
+2. **Content Management**:
+   - Start with small downloads
+   - Check content quality
+   - Backup important knowledge bases
+
+3. **System Resources**:
+   - Monitor disk space
+   - Watch memory usage
+   - Use reasonable page limits

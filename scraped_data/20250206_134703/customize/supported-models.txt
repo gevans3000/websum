@@ -1,0 +1,206 @@
+Browser Use home page![light logo [1]!dark logo [2]](https://docs.browser-use.com/customize/<https:/browser-use.com>)
+Search or ask...
+Ctrl K
+Search...
+Navigation
+Customize
+Supported Models
+Documentation [3]Cloud API [4]
+Get Started
+ Introduction [5]
+ Quickstart [6]
+
+---
+
+Customize
+ Supported Models [7]
+ Agent Settings [8]
+ Browser Settings [9]
+ Connect to your Browser [10]
+ Output Format [11]
+ System Prompt [12]
+ Sensitive Data [13]
+ Custom Functions [14]
+
+---
+
+Development
+ Local Setup [15]
+ Telemetry [16]
+ Observability [17]
+ Roadmap [18]
+
+---
+
+​ [19]
+Overview
+Browser Use supports various LangChain chat models. Here’s how to configure and use the most popular ones. The full list is available in the .
+​ [20]
+Model Recommendations
+We have yet to test performance across all models. Currently, we achieve the best results using GPT-4o with an 89% accuracy on the WebVoyager Dataset [21]. DeepSeek-V3 is 30 times cheaper than GPT-4o. Gemini-2.0-exp is also gaining popularity in the community because it is currently free. We also support local models, like Qwen 2.5, but be aware that small models often return the wrong output structure-which lead to parsing errors. We believe that local models will improve significantly this year.
+All models require their respective API keys. Make sure to set them in your environment variables before running the agent.
+​ [22]
+Supported Models
+All LangChain chat models, which support tool-calling are available. We will document the most popular ones here.
+​ [23]
+OpenAI
+OpenAI’s GPT-4o models are recommended for best performance.
+Copy
+
+---
+
+Required environment variables:
+.env
+Copy
+
+---
+
+​ [24]
+Anthropic
+Copy
+
+---
+
+And add the variable:
+.env
+Copy
+
+---
+
+​ [25]
+Azure OpenAI
+Copy
+
+---
+
+Required environment variables:
+.env
+Copy
+
+---
+
+​ [26]
+Gemini
+Copy
+
+---
+
+Required environment variables:
+.env
+Copy
+
+---
+
+​ [27]
+DeepSeek-V3
+The community likes DeepSeek-V3 for its low price, no rate limits, open-source nature, and good performance. The example is available .
+Copy
+
+---
+
+Required environment variables:
+.env
+Copy
+
+---
+
+​ [28]
+DeepSeek-R1
+We support DeepSeek-R1. Its not fully tested yet, more and more functionality will be added, like e.g. the output of it’sreasoning content. The example is available . It does not support vision. The model is open-source so you could also use it with Ollama, but we have not tested it.
+Copy
+
+---
+
+Required environment variables:
+.env
+Copy
+
+---
+
+​ [29]
+Ollama
+Many users asked for local models. Here they are.
+• Download Ollama from 
+• Run . Pick a model which supports tool-calling from 
+• Run 
+
+---
+
+Copy
+
+---
+
+Required environment variables: None!
+​ [30]
+Coming soon
+(We are working on it)
+ Groq
+ Github
+ Fine-tuned models
+
+---
+
+Was this page helpful?
+YesNo
+Quickstart [31]Agent Settings [32]
+On this page
+ Overview [33]
+ Model Recommendations [34]
+ Supported Models [35]
+ OpenAI [36]
+ Anthropic [37]
+ Azure OpenAI [38]
+ Gemini [39]
+ DeepSeek-V3 [40]
+ DeepSeek-R1 [41]
+ Ollama [42]
+ Coming soon [43]
+
+---
+
+
+
+References:
+[1] https://mintlify.s3.us-west-1.amazonaws.com/browseruse-0aece648/logo/light.svg
+[2] https://mintlify.s3.us-west-1.amazonaws.com/browseruse-0aece648/logo/dark.svg
+[3] https://docs.browser-use.com/customize/</introduction>
+[4] https://docs.browser-use.com/customize/</cloud/quickstart>
+[5] https://docs.browser-use.com/customize/</introduction>
+[6] https://docs.browser-use.com/customize/</quickstart>
+[7] https://docs.browser-use.com/customize/</customize/supported-models>
+[8] https://docs.browser-use.com/customize/</customize/agent-settings>
+[9] https://docs.browser-use.com/customize/</customize/browser-settings>
+[10] https://docs.browser-use.com/customize/</customize/real-browser>
+[11] https://docs.browser-use.com/customize/</customize/output-format>
+[12] https://docs.browser-use.com/customize/</customize/system-prompt>
+[13] https://docs.browser-use.com/customize/</customize/sensitive-data>
+[14] https://docs.browser-use.com/customize/</customize/custom-functions>
+[15] https://docs.browser-use.com/customize/</development/local-setup>
+[16] https://docs.browser-use.com/customize/</development/telemetry>
+[17] https://docs.browser-use.com/customize/</development/observability>
+[18] https://docs.browser-use.com/customize/</development/roadmap>
+[19] https://docs.browser-use.com/customize/<#overview>
+[20] https://docs.browser-use.com/customize/<#model-recommendations>
+[21] https://docs.browser-use.com/customize/<https:/browser-use.com/posts/sota-technical-report>
+[22] https://docs.browser-use.com/customize/<#supported-models>
+[23] https://docs.browser-use.com/customize/<#openai>
+[24] https://docs.browser-use.com/customize/<#anthropic>
+[25] https://docs.browser-use.com/customize/<#azure-openai>
+[26] https://docs.browser-use.com/customize/<#gemini>
+[27] https://docs.browser-use.com/customize/<#deepseek-v3>
+[28] https://docs.browser-use.com/customize/<#deepseek-r1>
+[29] https://docs.browser-use.com/customize/<#ollama>
+[30] https://docs.browser-use.com/customize/<#coming-soon>
+[31] https://docs.browser-use.com/customize/</quickstart>
+[32] https://docs.browser-use.com/customize/</customize/agent-settings>
+[33] https://docs.browser-use.com/customize/<#overview>
+[34] https://docs.browser-use.com/customize/<#model-recommendations>
+[35] https://docs.browser-use.com/customize/<#supported-models>
+[36] https://docs.browser-use.com/customize/<#openai>
+[37] https://docs.browser-use.com/customize/<#anthropic>
+[38] https://docs.browser-use.com/customize/<#azure-openai>
+[39] https://docs.browser-use.com/customize/<#gemini>
+[40] https://docs.browser-use.com/customize/<#deepseek-v3>
+[41] https://docs.browser-use.com/customize/<#deepseek-r1>
+[42] https://docs.browser-use.com/customize/<#ollama>
+[43] https://docs.browser-use.com/customize/<#coming-soon>

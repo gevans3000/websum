@@ -1,0 +1,39 @@
+Simple Crawling
+This guide covers the basics of web crawling with Crawl4AI. You'll learn how to set up a crawler, make your first request, and understand the response.
+Basic Usage
+Set up a simple crawl using and :
+
+---
+
+Understanding the Response
+The method returns a object with several useful properties. Here's a quick overview (see CrawlResult [1] for complete details):
+
+---
+
+Adding Basic Options
+Customize your crawl using :
+
+---
+
+Handling Errors
+Always check if the crawl was successful:
+
+---
+
+Logging and Debugging
+Enable verbose logging in :
+
+---
+
+Complete Example
+Here's a more comprehensive example demonstrating common usage patterns:
+
+---
+
+Search
+xClose
+Type to start searching
+
+
+References:
+[1] https://docs.crawl4ai.com/core/api/crawl-result/>

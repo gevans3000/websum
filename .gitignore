@@ -1,5 +1,5 @@
 # Ignore scraped data outputs
-scraped_data/
+
 
 # Python development artifacts
 __pycache__/

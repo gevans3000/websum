@@ -115,10 +115,7 @@
     "timestamp": "2025-02-06T13:23:42.788553",
     "count": 1
   },
-  "https://docs.crawl4ai.com/core/markdown-generation": {
-    "timestamp": "2025-02-06T13:23:43.955287",
-    "count": 1
-  },
+
   "https://docs.crawl4ai.com/core/page-interaction": {
     "timestamp": "2025-02-06T13:23:45.314343",
     "count": 1
@@ -145,6 +142,146 @@
   },
   "https://docs.crawl4ai.com/extraction/no-llm-strategies": {
     "timestamp": "2025-02-06T13:23:52.553522",
+    "count": 1
+  },
+  "https://docs.browser-use.com/cloud/quickstart": {
+    "timestamp": "2025-02-06T13:46:14.277642",
+    "count": 1
+  },
+  "https://docs.browser-use.com/customize/agent-settings": {
+    "timestamp": "2025-02-06T13:46:15.527638",
+    "count": 1
+  },
+  "https://docs.browser-use.com/customize/browser-settings": {
+    "timestamp": "2025-02-06T13:47:06.008800",
+    "count": 1
+  },
+  "https://docs.browser-use.com/customize/custom-functions": {
+    "timestamp": "2025-02-06T13:47:07.397996",
+    "count": 1
+  },
+  "https://docs.browser-use.com/customize/output-format": {
+    "timestamp": "2025-02-06T13:47:08.871810",
+    "count": 1
+  },
+  "https://docs.browser-use.com/customize/real-browser": {
+    "timestamp": "2025-02-06T13:47:10.312040",
+    "count": 1
+  },
+  "https://docs.browser-use.com/customize/sensitive-data": {
+    "timestamp": "2025-02-06T13:47:11.645856",
+    "count": 1
+  },
+  "https://docs.browser-use.com/customize/supported-models": {
+    "timestamp": "2025-02-06T13:47:13.044031",
+    "count": 1
+  },
+  "https://docs.browser-use.com/customize/system-prompt": {
+    "timestamp": "2025-02-06T13:47:14.463340",
+    "count": 1
+  },
+  "https://docs.browser-use.com/development/local-setup": {
+    "timestamp": "2025-02-06T13:47:15.837589",
+    "count": 1
+  },
+  "https://docs.browser-use.com/development/observability": {
+    "timestamp": "2025-02-06T13:47:17.180108",
+    "count": 1
+  },
+  "https://docs.browser-use.com/development/roadmap": {
+    "timestamp": "2025-02-06T13:47:18.550567",
+    "count": 1
+  },
+  "https://docs.browser-use.com/development/telemetry": {
+    "timestamp": "2025-02-06T13:47:19.692531",
+    "count": 1
+  },
+  "https://docs.browser-use.com/introduction": {
+    "timestamp": "2025-02-06T13:47:20.950880",
+    "count": 1
+  },
+  "https://docs.browser-use.com/quickstart": {
+    "timestamp": "2025-02-06T13:47:22.322016",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/cache-modes": {
+    "timestamp": "2025-02-07T09:29:44.605117",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/content-selection": {
+    "timestamp": "2025-02-07T09:29:45.620706",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/crawler-result": {
+    "timestamp": "2025-02-07T09:29:46.619394",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/docker-deploymeny": {
+    "timestamp": "2025-02-07T09:29:47.635620",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/fit-markdown": {
+    "timestamp": "2025-02-07T09:29:48.640677",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/installation": {
+    "timestamp": "2025-02-07T09:29:49.655678",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/link-media": {
+    "timestamp": "2025-02-07T09:29:50.690854",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/local-files": {
+    "timestamp": "2025-02-07T09:29:51.666853",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/markdown-generation": {
+    "timestamp": "2025-02-07T09:29:52.676129",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/page-interaction": {
+    "timestamp": "2025-02-07T09:29:53.691039",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/quickstart": {
+    "timestamp": "2025-02-07T09:29:54.674692",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/crawl-dispatcher": {
+    "timestamp": "2025-02-07T10:06:09.289039",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/file-downloading": {
+    "timestamp": "2025-02-07T10:06:10.112941",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/hooks-auth": {
+    "timestamp": "2025-02-07T10:06:11.134395",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/identity-based-crawling": {
+    "timestamp": "2025-02-07T10:06:12.125146",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/lazy-loading": {
+    "timestamp": "2025-02-07T10:06:13.146957",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/multi-url-crawling": {
+    "timestamp": "2025-02-07T10:06:14.169038",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/proxy-security": {
+    "timestamp": "2025-02-07T10:06:15.170452",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/session-management": {
+    "timestamp": "2025-02-07T10:06:16.176955",
+    "count": 1
+  },
+  "https://docs.crawl4ai.com/ssl-certificate": {
+    "timestamp": "2025-02-07T10:06:17.166981",
     "count": 1
   }
 }

@@ -1,0 +1,143 @@
+Browser Use home page![light logo [1]!dark logo [2]](https://docs.browser-use.com/development/<https:/browser-use.com>)
+Search or ask...
+Ctrl K
+Search...
+Navigation
+Development
+Local Setup
+Documentation [3]Cloud API [4]
+Get Started
+ Introduction [5]
+ Quickstart [6]
+
+---
+
+Customize
+ Supported Models [7]
+ Agent Settings [8]
+ Browser Settings [9]
+ Connect to your Browser [10]
+ Output Format [11]
+ System Prompt [12]
+ Sensitive Data [13]
+ Custom Functions [14]
+
+---
+
+Development
+ Local Setup [15]
+ Telemetry [16]
+ Observability [17]
+ Roadmap [18]
+
+---
+
+​ [19]
+Prerequisites
+Browser Use requires Python 3.11 or higher. We recommend using for Python environment management.
+​ [20]
+Clone the Repository
+First, clone the Browser Use repository:
+Copy
+
+---
+
+​ [21]
+Environment Setup
+• Create a virtual environment:
+
+---
+
+Copy
+• Install dependencies:
+
+---
+
+Copy
+
+---
+
+The flag installs the package in “editable” mode, which means your local code changes will be reflected immediately without requiring reinstallation. The part installs additional dependencies needed for development.
+​ [22]
+Configuration
+Set up your environment variables:
+Copy
+
+---
+
+Or manually create a file with your API keys:
+.env
+Copy
+
+---
+
+You can use any LLM model supported by LangChain. See LangChain Models [23] for available options and their specific API key requirements.
+​ [24]
+Development
+After setup, you can:
+ Run tests with 
+ Build the package with 
+ Try the examples in the directory
+
+---
+
+​ [25]
+Getting Help
+If you run into any issues:
+• Check our 
+• Join our Discord community [26] for support
+
+---
+
+We welcome contributions! See our Contribution Guide [27] for guidelines on how to help improve Browser Use.
+Was this page helpful?
+YesNo
+Custom Functions [28]Telemetry [29]
+On this page
+ Prerequisites [30]
+ Clone the Repository [31]
+ Environment Setup [32]
+ Configuration [33]
+ Development [34]
+• Getting Help [35]
+
+---
+
+
+
+References:
+[1] https://mintlify.s3.us-west-1.amazonaws.com/browseruse-0aece648/logo/light.svg
+[2] https://mintlify.s3.us-west-1.amazonaws.com/browseruse-0aece648/logo/dark.svg
+[3] https://docs.browser-use.com/development/</introduction>
+[4] https://docs.browser-use.com/development/</cloud/quickstart>
+[5] https://docs.browser-use.com/development/</introduction>
+[6] https://docs.browser-use.com/development/</quickstart>
+[7] https://docs.browser-use.com/development/</customize/supported-models>
+[8] https://docs.browser-use.com/development/</customize/agent-settings>
+[9] https://docs.browser-use.com/development/</customize/browser-settings>
+[10] https://docs.browser-use.com/development/</customize/real-browser>
+[11] https://docs.browser-use.com/development/</customize/output-format>
+[12] https://docs.browser-use.com/development/</customize/system-prompt>
+[13] https://docs.browser-use.com/development/</customize/sensitive-data>
+[14] https://docs.browser-use.com/development/</customize/custom-functions>
+[15] https://docs.browser-use.com/development/</development/local-setup>
+[16] https://docs.browser-use.com/development/</development/telemetry>
+[17] https://docs.browser-use.com/development/</development/observability>
+[18] https://docs.browser-use.com/development/</development/roadmap>
+[19] https://docs.browser-use.com/development/<#prerequisites>
+[20] https://docs.browser-use.com/development/<#clone-the-repository>
+[21] https://docs.browser-use.com/development/<#environment-setup>
+[22] https://docs.browser-use.com/development/<#configuration>
+[23] https://docs.browser-use.com/development/</customize/langchain-models>
+[24] https://docs.browser-use.com/development/<#development>
+[25] https://docs.browser-use.com/development/<#getting-help>
+[26] https://docs.browser-use.com/development/<https:/link.browser-use.com/discord>
+[27] https://docs.browser-use.com/development/</development/contribution-guide>
+[28] https://docs.browser-use.com/development/</customize/custom-functions>
+[29] https://docs.browser-use.com/development/</development/telemetry>
+[30] https://docs.browser-use.com/development/<#prerequisites>
+[31] https://docs.browser-use.com/development/<#clone-the-repository>
+[32] https://docs.browser-use.com/development/<#environment-setup>
+[33] https://docs.browser-use.com/development/<#configuration>
+[34] https://docs.browser-use.com/development/<#development>
+[35] https://docs.browser-use.com/development/<#getting-help>

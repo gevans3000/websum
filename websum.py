@@ -164,6 +164,20 @@ class URLCache:
             logger.error(f"Error merging cache file {other_cache_file}: {e}")
             return 0
 
+class CrawlResult:
+    def __init__(self):
+        self.url = ""
+        self.html = ""
+        self.markdown = ""
+        self.links = []
+        self.success = False
+        self.error = None
+        self.title = ""  # Page title
+        self.categories = []  # Topic categories
+        self.summary = ""  # Brief summary
+        self.keywords = []  # Key terms
+        self.last_modified = None  # Last modified date
+
 def ensure_url_scheme(url):
     """Ensure URL has a proper scheme"""
     if not url.startswith(('http://', 'https://')):
@@ -284,6 +298,38 @@ def extract_page_links(html_content, base_url):
     
     return sorted(list(links))
 
+def extract_metadata(html_content):
+    """Extract metadata from HTML content"""
+    soup = BeautifulSoup(html_content, 'html.parser')
+    metadata = {
+        'title': '',
+        'description': '',
+        'keywords': [],
+        'last_modified': None
+    }
+    
+    # Extract title
+    title_tag = soup.find('title')
+    if title_tag:
+        metadata['title'] = title_tag.text.strip()
+    
+    # Extract meta tags
+    for meta in soup.find_all('meta'):
+        name = meta.get('name', '').lower()
+        content = meta.get('content', '')
+        
+        if name == 'description':
+            metadata['description'] = content
+        elif name == 'keywords':
+            metadata['keywords'] = [k.strip() for k in content.split(',')]
+        elif name == 'last-modified':
+            try:
+                metadata['last_modified'] = datetime.datetime.fromisoformat(content)
+            except:
+                pass
+    
+    return metadata
+
 def sanitize_filename(url):
     """Convert URL to safe filename"""
     # Parse URL
@@ -370,6 +416,323 @@ def save_readable_text(markdown_content, output_path, include_links=True, includ
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(text.strip())
 
+def extract_readable_text(markdown_content):
+    """Extract clean readable text from markdown, preserving code and instructions"""
+    if not markdown_content:
+        return ""
+    
+    text = markdown_content
+    sections = []
+    
+    # Split into sections based on headers
+    header_pattern = r'^#{1,6}\s+(.+)$'
+    current_section = []
+    current_header = "Introduction"
+    
+    for line in text.split('\n'):
+        header_match = re.match(header_pattern, line)
+        if header_match:
+            if current_section:
+                sections.append((current_header, '\n'.join(current_section)))
+            current_header = header_match.group(1)
+            current_section = []
+        else:
+            current_section.append(line)
+    
+    if current_section:
+        sections.append((current_header, '\n'.join(current_section)))
+    
+    # Process each section
+    processed_sections = []
+    for header, content in sections:
+        processed = f"\n{header}\n{'=' * len(header)}\n"
+        
+        # Extract code blocks
+        code_blocks = re.finditer(r'```(\w+)?\n(.*?)```', content, re.DOTALL)
+        code_positions = []
+        for match in code_blocks:
+            lang = match.group(1) or 'text'
+            code = match.group(2)
+            code_positions.append({
+                'start': match.start(),
+                'end': match.end(),
+                'replacement': f"\nCode Example ({lang}):\n-------------------\n{code.strip()}\n"
+            })
+        
+        # Replace code blocks from end to start to maintain positions
+        for pos in reversed(code_positions):
+            content = content[:pos['start']] + pos['replacement'] + content[pos['end']:]
+        
+        # Handle inline code
+        content = re.sub(r'`([^`]+)`', r'<code>\1</code>', content)
+        
+        # Extract steps or instructions
+        step_pattern = r'^\s*(?:\d+\.|[-\*\+])\s+(.+)$'
+        lines = content.split('\n')
+        in_steps = False
+        step_buffer = []
+        
+        for line in lines:
+            if re.match(step_pattern, line):
+                if not in_steps:
+                    in_steps = True
+                    step_buffer.append("\nSteps:\n------")
+                step_buffer.append(re.sub(r'^\s*(?:\d+\.|[-\*\+])\s+', '• ', line))
+            else:
+                if in_steps:
+                    in_steps = False
+                    step_buffer.append("")
+                step_buffer.append(line)
+        
+        content = '\n'.join(step_buffer)
+        
+        # Clean up formatting but preserve structure
+        content = re.sub(r'\*\*([^\*]+)\*\*', r'[Important: \1]', content)  # Convert bold to semantic markup
+        content = re.sub(r'\*([^\*]+)\*', r'[Note: \1]', content)  # Convert italic to semantic markup
+        content = re.sub(r'_([^_]+)_', r'[Emphasis: \1]', content)  # Convert underscore to semantic markup
+        
+        processed += content + "\n"
+        processed_sections.append(processed)
+    
+    return '\n'.join(processed_sections)
+
+def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_category=None):
+    """Save content in knowledge base format"""
+    if kb_root and kb_category:
+        kb_dir = os.path.join(kb_root, kb_category)
+        os.makedirs(kb_dir, exist_ok=True)
+    else:
+        kb_dir = output_dir
+    
+    # Create knowledge base structure with enhanced metadata
+    kb_entry = {
+        'url': content.url,
+        'timestamp': datetime.datetime.now().isoformat(),
+        'title': content.title,
+        'categories': content.categories,
+        'summary': content.summary,
+        'keywords': content.keywords,
+        'last_modified': content.last_modified,
+        'metadata': {
+            'type': 'technical_documentation',
+            'contains_code_examples': bool(re.search(r'```', content.markdown)),
+            'contains_steps': bool(re.search(r'^\s*(?:\d+\.|[-\*\+])\s+', content.markdown, re.M)),
+            'programming_languages': list(set(re.findall(r'```(\w+)', content.markdown))),
+            'technical_terms': extract_technical_terms(content.markdown)
+        },
+        'content': {
+            'html': content.html,
+            'markdown': content.markdown,
+            'structured_text': extract_readable_text(content.markdown)
+        },
+        'links': content.links,
+        'references': []
+    }
+    
+    # Save as JSON
+    kb_file = os.path.join(kb_dir, 'kb_entry.json')
+    with open(kb_file, 'w', encoding='utf-8') as f:
+        json.dump(kb_entry, f, indent=2, ensure_ascii=False)
+    
+    # Save LLM-friendly version
+    text_file = os.path.join(kb_dir, 'llm_instructions.txt')
+    with open(text_file, 'w', encoding='utf-8') as f:
+        f.write(f"{content.title}\n{'=' * len(content.title)}\n\n")
+        
+        if content.summary:
+            f.write(f"Purpose\n-------\n{content.summary}\n\n")
+        
+        if content.keywords:
+            f.write(f"Technical Scope\n--------------\n{', '.join(content.keywords)}\n\n")
+        
+        f.write(extract_readable_text(content.markdown))
+        
+        if content.links:
+            f.write("\nRelated Documentation\n--------------------\n")
+            for link in content.links:
+                f.write(f"• {link}\n")
+
+def extract_technical_terms(text):
+    """Extract likely technical terms from the content"""
+    # Common technical word patterns
+    patterns = [
+        r'\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b',  # CamelCase
+        r'\b[a-z]+_[a-z_]+\b',  # snake_case
+        r'`[^`]+`',  # Code in backticks
+        r'\b(?:API|REST|HTTP|JSON|XML|HTML|CSS|URL|SDK|CLI)\b',  # Common acronyms
+        r'\b(?:function|class|method|object|variable|parameter)\b'  # Programming terms
+    ]
+    
+    terms = set()
+    for pattern in patterns:
+        terms.update(re.findall(pattern, text))
+    
+    return list(terms)
+
+def get_safe_filename(title, url):
+    """Generate a safe, descriptive filename from title and URL"""
+    # Extract meaningful parts from URL
+    url_path = urlparse(url).path.strip('/')
+    url_parts = [part for part in url_path.split('/') if part]
+    
+    # Clean the title
+    if not title:
+        title = url_parts[-1] if url_parts else "untitled"
+    
+    # Remove version numbers and common words
+    title = re.sub(r'\s*[-–—]\s*(?:v\d+\.\d+\.\d+\w*|Documentation|\(.*?\))', '', title)
+    title = re.sub(r'\s+', '_', title.strip())
+    
+    # Create safe filename
+    safe_chars = re.sub(r'[^a-zA-Z0-9_-]', '', title.lower())
+    safe_chars = re.sub(r'_+', '_', safe_chars)
+    
+    return safe_chars
+
+def save_unified_knowledge(content, output_dir, kb_root=None, kb_category=None):
+    """Save content in a unified format for both LLMs and humans"""
+    if kb_root and kb_category:
+        kb_dir = os.path.join(kb_root, kb_category)
+        os.makedirs(kb_dir, exist_ok=True)
+    else:
+        kb_dir = output_dir
+
+    # Generate specific filename from content
+    filename = get_safe_filename(content.title, content.url)
+    unified_file = os.path.join(kb_dir, f'{filename}.md')
+    
+    with open(unified_file, 'w', encoding='utf-8') as f:
+        # Document Header
+        f.write(f"# {content.title}\n\n")
+        
+        # Metadata Section
+        f.write("## 📚 Document Metadata\n\n")
+        f.write("```yaml\n")
+        f.write(f"title: {content.title}\n")
+        f.write(f"source_url: {content.url}\n")
+        f.write(f"category: {'/'.join(content.categories) if content.categories else 'Uncategorized'}\n")
+        f.write(f"keywords: {', '.join(content.keywords) if content.keywords else 'None'}\n")
+        f.write(f"last_modified: {content.last_modified or 'Unknown'}\n")
+        f.write(f"type: Technical Documentation\n")
+        f.write("```\n\n")
+
+        # Quick Summary
+        if content.summary:
+            f.write("## 📋 Quick Summary\n\n")
+            f.write(f"{content.summary}\n\n")
+
+        # Technical Context
+        f.write("## 🔧 Technical Context\n\n")
+        code_langs = list(set(re.findall(r'```(\w+)', content.markdown)))
+        if code_langs:
+            f.write("### Programming Languages\n")
+            for lang in code_langs:
+                f.write(f"- {lang}\n")
+            f.write("\n")
+
+        tech_terms = extract_technical_terms(content.markdown)
+        if tech_terms:
+            f.write("### Key Technical Terms\n")
+            for term in tech_terms:
+                f.write(f"- {term}\n")
+            f.write("\n")
+
+        # Main Content
+        f.write("## 📖 Main Content\n\n")
+        
+        # Process content by sections
+        sections = []
+        current_section = []
+        current_header = None
+        
+        for line in content.markdown.split('\n'):
+            header_match = re.match(r'^(#{1,6})\s+(.+)$', line)
+            if header_match:
+                if current_section:
+                    sections.append((current_header, '\n'.join(current_section)))
+                current_header = (len(header_match.group(1)), header_match.group(2))
+                current_section = []
+            else:
+                current_section.append(line)
+        
+        if current_section:
+            sections.append((current_header, '\n'.join(current_section)))
+
+        # Process each section
+        for header, section_content in sections:
+            if header:
+                level, title = header
+                f.write(f"{'#' * (level + 2)} {title}\n\n")  # Adjust header level
+
+            # Extract and format code blocks
+            code_pattern = r'```(\w+)?\n(.*?)```'
+            code_blocks = list(re.finditer(code_pattern, section_content, re.DOTALL))
+            
+            # Replace code blocks with placeholders and store them
+            code_replacements = []
+            for i, match in enumerate(code_blocks):
+                lang = match.group(1) or 'text'
+                code = match.group(2).strip()
+                placeholder = f"__CODE_BLOCK_{i}__"
+                code_replacements.append((placeholder, f"Code Example ({lang}):\n```{lang}\n{code}\n```\n"))
+                section_content = section_content.replace(match.group(0), placeholder)
+
+            # Process steps and instructions
+            lines = section_content.split('\n')
+            in_steps = False
+            processed_lines = []
+            
+            for line in lines:
+                if re.match(r'^\s*(?:\d+\.|[-\*\+])\s+', line):
+                    if not in_steps:
+                        in_steps = True
+                        processed_lines.append("\n🔍 Instructions:\n")
+                    processed_lines.append(re.sub(r'^\s*(?:\d+\.|[-\*\+])\s+', '• ', line))
+                else:
+                    if in_steps:
+                        in_steps = False
+                        processed_lines.append("")
+                    processed_lines.append(line)
+            
+            section_content = '\n'.join(processed_lines)
+
+            # Add semantic markup
+            section_content = re.sub(r'\*\*([^\*]+)\*\*', r'❗ Important: \1', section_content)
+            section_content = re.sub(r'\*([^\*]+)\*', r'💡 Note: \1', section_content)
+            section_content = re.sub(r'`([^`]+)`', r'`\1`', section_content)
+
+            # Restore code blocks
+            for placeholder, code_block in code_replacements:
+                section_content = section_content.replace(placeholder, f"\n{code_block}\n")
+
+            f.write(f"{section_content}\n\n")
+
+        # Related Resources
+        if content.links:
+            f.write("## 🔗 Related Resources\n\n")
+            for link in content.links:
+                f.write(f"- [{link}]({link})\n")
+
+        # Training Notes for LLMs
+        f.write("\n## 🤖 LLM Training Notes\n\n")
+        f.write("This document is structured for both human readability and LLM training:\n\n")
+        f.write("1. 📚 **Metadata Section**: Contains document classification and context\n")
+        f.write("2. 📋 **Quick Summary**: High-level overview of the content\n")
+        f.write("3. 🔧 **Technical Context**: Programming languages and key terms\n")
+        f.write("4. 📖 **Main Content**: Organized with:\n")
+        f.write("   - Clear section headers\n")
+        f.write("   - Code examples with language tags\n")
+        f.write("   - Step-by-step instructions\n")
+        f.write("   - Important points and notes clearly marked\n")
+        f.write("5. 🔗 **Related Resources**: Links to additional information\n\n")
+        f.write("Special markers used:\n")
+        f.write("- ❗ Important: Critical information\n")
+        f.write("- 💡 Note: Additional context\n")
+        f.write("- 🔍 Instructions: Step-by-step procedures\n")
+        f.write("- ```language: Code blocks with language specification\n")
+
+    return unified_file
+
 async def process_page(url, depth, max_depth, crawler, progress, output_dir, debug=False):
     """Process a single page and return its links if within depth limit."""
     if depth > max_depth:
@@ -399,7 +762,7 @@ async def process_page(url, depth, max_depth, crawler, progress, output_dir, deb
     links = extract_page_links(result.html, url)
     if debug:
         logger.debug(f"Found {len(links)} links on the page:")
-        for link in links[:5]:
+        for link in links[:5]:  
             logger.debug(f"  - {link}")
         if len(links) > 5:
             logger.debug(f"  ... and {len(links) - 5} more")
@@ -414,18 +777,30 @@ async def process_page(url, depth, max_depth, crawler, progress, output_dir, deb
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     # Save the content
-    content = {
-        'url': url,
-        'timestamp': datetime.datetime.now().isoformat(),
-        'html': result.html,
-        'markdown': result.markdown,
-        'links': links,
-        'depth': depth,
-        'stats': progress.get_stats()
-    }
+    content = CrawlResult()
+    content.url = url
+    content.html = result.html
+    content.markdown = result.markdown
+    content.links = links
+    content.success = result.success
+    metadata = extract_metadata(result.html)
+    content.title = metadata['title']
+    content.keywords = metadata['keywords']
+    content.last_modified = metadata['last_modified']
     
     with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(content, f, indent=2, ensure_ascii=False)
+        json.dump({
+            'url': content.url,
+            'timestamp': datetime.datetime.now().isoformat(),
+            'html': content.html,
+            'markdown': content.markdown,
+            'links': content.links,
+            'title': content.title,
+            'keywords': content.keywords,
+            'last_modified': content.last_modified,
+            'depth': depth,
+            'stats': progress.get_stats()
+        }, f, indent=2, ensure_ascii=False)
     
     if debug:
         logger.debug(f"Content saved to {output_path}")
@@ -436,6 +811,12 @@ async def process_page(url, depth, max_depth, crawler, progress, output_dir, deb
     
     if debug:
         logger.debug(f"Readable text saved to {text_path}")
+    
+    # Save knowledge base entry
+    unified_file = save_unified_knowledge(content, os.path.dirname(output_path))
+    
+    if debug:
+        logger.debug(f"Unified knowledge file saved to {unified_file}")
     
     return True, links if depth < max_depth else []
 
@@ -457,8 +838,22 @@ async def main():
                       help='File to store URL cache (default: url_cache.json)')
     parser.add_argument('--merge-cache', 
                       help='Merge another cache file into the current cache')
-    parser.add_argument('--include-links', action='store_true', help='Include links in readable text output')
-    parser.add_argument('--include-sections', action='store_true', help='Add section breaks in readable text output')
+    
+    # Knowledge base options
+    kb_group = parser.add_argument_group('Knowledge Base Options')
+    kb_group.add_argument('--kb-root', default='knowledge_base',
+                       help='Root directory for knowledge base')
+    kb_group.add_argument('--kb-category', 
+                       help='Category for the content (e.g., python/web-scraping)')
+    kb_group.add_argument('--kb-title',
+                       help='Title for the content (default: extracted from page)')
+    kb_group.add_argument('--kb-summary',
+                       help='Brief summary of the content')
+    kb_group.add_argument('--kb-keywords',
+                       help='Comma-separated keywords')
+    kb_group.add_argument('--kb-format', choices=['flat', 'hierarchical'], default='hierarchical',
+                       help='Knowledge base organization format')
+    
     args = parser.parse_args()
     
     # Configure logging
@@ -521,34 +916,65 @@ async def main():
             links = extract_page_links(result.html, url)
             if args.debug:
                 logger.debug(f"Found {len(links)} links on the page:")
-                for link in links[:5]:  # Show first 5 links
+                for link in links[:5]:  
                     logger.debug(f"  - {link}")
                 if len(links) > 5:
                     logger.debug(f"  ... and {len(links) - 5} more")
             
             # Save the content
             output_file = os.path.join(args.output_dir, 'content.json')
-            content = {
-                'url': url,
-                'timestamp': datetime.datetime.now().isoformat(),
-                'html': result.html,
-                'markdown': result.markdown,
-                'links': links,
-                'stats': progress.get_stats()  # Include progress stats in output
-            }
+            content = CrawlResult()
+            content.url = url
+            content.html = result.html
+            content.markdown = result.markdown
+            content.links = links
+            content.success = result.success
+            metadata = extract_metadata(result.html)
+            content.title = metadata['title']
+            content.keywords = metadata['keywords']
+            content.last_modified = metadata['last_modified']
             
             with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(content, f, indent=2, ensure_ascii=False)
+                json.dump({
+                    'url': content.url,
+                    'timestamp': datetime.datetime.now().isoformat(),
+                    'html': content.html,
+                    'markdown': content.markdown,
+                    'links': content.links,
+                    'title': content.title,
+                    'keywords': content.keywords,
+                    'last_modified': content.last_modified,
+                    'stats': progress.get_stats()  
+                }, f, indent=2, ensure_ascii=False)
             
             if args.debug:
                 logger.debug(f"Content saved to {output_file}")
             
             # Save readable text
             readable_text_file = os.path.join(args.output_dir, 'readable_text.txt')
-            save_readable_text(result.markdown, readable_text_file, include_links=args.include_links, include_sections=args.include_sections)
+            save_readable_text(result.markdown, readable_text_file)
             
             if args.debug:
                 logger.debug(f"Readable text saved to {readable_text_file}")
+            
+            # Save knowledge base entry
+            if args.kb_root and args.kb_category:
+                content.categories = [args.kb_category]
+                if args.kb_title:
+                    content.title = args.kb_title
+                if args.kb_summary:
+                    content.summary = args.kb_summary
+                if args.kb_keywords:
+                    content.keywords = [k.strip() for k in args.kb_keywords.split(',')]
+                
+                unified_file = save_unified_knowledge(content, args.output_dir, args.kb_root, args.kb_category)
+                if args.debug:
+                    logger.debug(f"Unified knowledge file saved to {unified_file}")
+            else:
+                unified_file = save_unified_knowledge(content, args.output_dir)
+            
+            if args.debug:
+                logger.debug(f"Unified knowledge file saved to {unified_file}")
             
             # Process links
             to_process = [(link, 1) for link in links]
