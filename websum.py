@@ -3,88 +3,100 @@ import os
 import sys
 import json
 import logging
-import datetime
 import argparse
 import asyncio
 import re
 from urllib.parse import urljoin, urlparse
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+from crawl4ai import (
+    AsyncWebCrawler,
+    BrowserConfig,
+    CrawlerRunConfig,
+    CacheMode,
+    ChunkingStrategy
+)
+from crawl4ai.content_filter_strategy import PruningContentFilter, BM25ContentFilter
+from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from crawl4ai.extraction_strategy import ExtractionStrategy, CosineStrategy
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
+from enum import Enum, auto
+import datetime
 import time
 
-# Initialize colorama
-init = None  # Removed unused import
-
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Constants
 VERSION = "1.0.0"
-TERM_WIDTH = None  # Removed unused constant
 
-# JavaScript code to extract clean content
-JS_CODE = None  # Removed unused JavaScript code
-
-# Browser configuration with proper settings
+# Browser configuration
 BROWSER_CONFIG = BrowserConfig(
+    browser_type="chromium",
     headless=True,
-    ignore_https_errors=True,
     viewport_width=1920,
     viewport_height=1080,
-    verbose=True
+    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    ignore_https_errors=True
 )
 
 # Crawler configuration
 CRAWLER_CONFIG = CrawlerRunConfig(
-    cache_mode=CacheMode.BYPASS,
-    wait_for="css:body",
-    word_count_threshold=50,
-    excluded_tags=['nav', 'footer', 'header'],
-    exclude_external_links=True,
+    word_count_threshold=3,
+    scan_full_page=True,
+    wait_until="networkidle",  # Wait for full JS execution
+    page_timeout=90000,  # 90 sec timeout for large pages
+    css_selector=".md-content__inner, .md-typeset, table.docutils, pre code",
     process_iframes=True,
-    remove_overlay_elements=True
+    remove_overlay_elements=True,
+    cache_mode=CacheMode.BYPASS,
+    exclude_external_links=False
+)
+
+# Markdown generator with enhanced formatting
+MARKDOWN_GENERATOR = DefaultMarkdownGenerator(
+    options={
+        "preserve_tables": True,  # Keeps technical parameter tables
+        "retain_code_blocks": True,  # Preserves syntax-highlighted code
+        "escape_html": False,  # Avoids unnecessary escaping
+        "inline_code_format": "backticks",
+        "strip_comments": True  
+    }
+)
+
+class SummaryFormat(Enum):
+    STANDARD = auto()
+    CONDENSED = auto()
+
+# Memory and performance optimization
+os.environ["CRAWL4AI_MAX_BUFFER_SIZE"] = "1000000"  # 1MB buffer
+os.environ["CRAWL4AI_CHUNK_SIZE"] = "524288"  # 512KB chunks
+os.environ["CRAWL4AI_STREAM_MODE"] = "True"
+
+# Content extraction strategy
+EXTRACTION_STRATEGY = CosineStrategy(
+    target_content_type="documentation",
+    word_count_threshold=10,
+    similarity_threshold=0.7
 )
 
 class CrawlProgress:
-    """Simple progress tracking for crawling"""
+    """Track crawl progress"""
     def __init__(self, page_limit=None):
-        self.total_pages = 0
-        self.processed_pages = 0
-        self.current_depth = 0
-        self.start_time = None
         self.page_limit = page_limit
+        self.pages_processed = 0
+        self.start_time = None
         
-    def start(self):
-        """Start tracking progress"""
-        self.start_time = datetime.datetime.now()
-        
-    def update(self, pages_at_depth=None):
-        """Update progress"""
-        self.processed_pages += 1
-        if pages_at_depth is not None:
-            remaining = min(pages_at_depth, self.page_limit - self.processed_pages) if self.page_limit else pages_at_depth
-            self.total_pages = self.processed_pages + remaining
-            
     def should_process_more(self):
         """Check if we should process more pages"""
-        return not self.page_limit or self.processed_pages < self.page_limit
-            
-    def get_stats(self):
-        """Get current statistics"""
-        elapsed = datetime.datetime.now() - self.start_time if self.start_time else None
-        return {
-            'processed': self.processed_pages,
-            'total': self.total_pages,
-            'depth': self.current_depth,
-            'elapsed': str(elapsed).split('.')[0] if elapsed else None,
-            'page_limit': self.page_limit
-        }
+        if self.page_limit is None:
+            return True
+        return self.pages_processed < self.page_limit
+    
+    def update(self):
+        """Update progress after processing a page"""
+        self.pages_processed += 1
 
 class RateLimiter:
     """Simple rate limiter to prevent overwhelming servers"""
@@ -165,138 +177,114 @@ class URLCache:
             return 0
 
 class CrawlResult:
+    """Store crawl results"""
     def __init__(self):
-        self.url = ""
-        self.html = ""
-        self.markdown = ""
-        self.links = []
+        self.url = None
         self.success = False
         self.error = None
-        self.title = ""  # Page title
-        self.categories = []  # Topic categories
-        self.summary = ""  # Brief summary
-        self.keywords = []  # Key terms
-        self.last_modified = None  # Last modified date
-
-def ensure_url_scheme(url):
-    """Ensure URL has a proper scheme"""
-    if not url.startswith(('http://', 'https://')):
-        url = 'https://' + url.lstrip('/')
-    return url
+        self.html = None
+        self.markdown = None
+        self.links = []
+        self.title = None
+        self.summary = None
+        self.keywords = []
+        self.categories = []
+        self.last_modified = None
 
 async def crawl_page(url, crawler_config=None):
     """Crawl a page and return structured content"""
-    if crawler_config is None:
-        crawler_config = BROWSER_CONFIG
-        
     try:
-        # Capture all output
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            async with AsyncWebCrawler(config=crawler_config) as crawler:
-                result = await crawler.arun(url, run_config=CRAWLER_CONFIG)
-                if not result.success:
-                    if logger.level == logging.DEBUG:
-                        logger.error(f"Failed to crawl {url}: {result.error_message}")
-                    return None
+        # Configure browser for optimal content extraction
+        browser_config = BROWSER_CONFIG
+        
+        # Configure crawler with optimized settings
+        if crawler_config is None:
+            crawler_config = CRAWLER_CONFIG
+        
+        result = CrawlResult()
+        result.url = url
+        
+        async with AsyncWebCrawler(browser_config) as crawler:
+            crawl_result = await crawler.arun(url=url, config=crawler_config)
+            
+            if crawl_result.success:
+                result.success = True
+                result.html = crawl_result.html
+                result.markdown = crawl_result.markdown
+                result.links = crawl_result.links if hasattr(crawl_result, 'links') else []
                 
-                if not result.html:
-                    if logger.level == logging.DEBUG:
-                        logger.error(f"No HTML content returned from {url}")
-                    return None
+                # Extract metadata if HTML is available
+                if result.html:
+                    soup = BeautifulSoup(result.html, 'html.parser')
+                    
+                    # Extract title
+                    title_elem = soup.find('title')
+                    if title_elem:
+                        result.title = title_elem.text.strip()
+                    
+                    # Extract meta description as summary
+                    meta_desc = soup.find('meta', {'name': 'description'})
+                    if meta_desc:
+                        result.summary = meta_desc.get('content', '')
+                    
+                    # Extract keywords
+                    meta_keywords = soup.find('meta', {'name': 'keywords'})
+                    if meta_keywords:
+                        result.keywords = [k.strip() for k in meta_keywords.get('content', '').split(',')]
+                    
+                    # Extract last modified date
+                    meta_modified = soup.find('meta', {'name': 'last-modified'})
+                    if meta_modified:
+                        result.last_modified = meta_modified.get('content', '')
+            else:
+                result.error = crawl_result.error if hasattr(crawl_result, 'error') else "Unknown error"
                 
-                try:
-                    # Parse the extracted content
-                    content = json.loads(result.extracted_content or '{}')
-                    if not content or not content.get('content', '').strip():
-                        if logger.level == logging.DEBUG:
-                            logger.warning(f"No content extracted from {url}")
-                        return None
-                    
-                    # Skip if no meaningful content
-                    if len(content['content'].split()) < 50:
-                        if logger.level == logging.DEBUG:
-                            logger.warning(f"Skipping {url}: insufficient content")
-                        return None
-                    
-                    # Add additional metadata
-                    content['url'] = url
-                    content['timestamp'] = datetime.datetime.now().isoformat()
-                    content['word_count'] = len(content['content'].split())
-                    
-                    # Clean up content
-                    content['content'] = content['content'].strip()
-                    for section in content.get('sections', []):
-                        section['content'] = section['content'].strip()
-                    
-                    return content
-                    
-                except json.JSONDecodeError:
-                    if logger.level == logging.DEBUG:
-                        logger.error(f"Failed to parse JSON from {url}")
-                    return None
+        return result
+        
     except Exception as e:
-        if logger.level == logging.DEBUG:
-            logger.exception(f"Error crawling {url}: {e}")
-        return None
+        logger.error(f"Error crawling {url}: {str(e)}")
+        result = CrawlResult()
+        result.url = url
+        result.error = str(e)
+        return result
+
+async def safe_crawl(url):
+    """Crawl a URL with retries and exponential backoff"""
+    retries = 3
+    for attempt in range(retries):
+        try:
+            async with AsyncWebCrawler(browser_config=BROWSER_CONFIG) as crawler:
+                result = await crawler.arun(url, config=CRAWLER_CONFIG)
+                if result.success:
+                    logger.info(f"✅ Successfully crawled: {url}")
+                    return result
+                else:
+                    logger.warning(f"⚠️ Attempt {attempt+1}/{retries} failed for {url}: {result.error}")
+        except Exception as e:
+            logger.error(f"❌ Error crawling {url}: {str(e)}")
+            if attempt < retries - 1:
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+    logger.error(f"⛔ Failed to crawl {url} after {retries} attempts.")
+    return None
 
 def extract_page_links(html_content, base_url):
-    """
-    Extract valid links from HTML content.
-    Args:
-        html_content (str): HTML content to extract links from
-        base_url (str): Base URL for resolving relative links
-    Returns:
-        list: List of normalized URLs
-    """
-    if not html_content:
-        return []
-        
-    # Parse base URL
-    parsed_base = urlparse(base_url)
-    base_domain = parsed_base.netloc
-    
-    # Use BeautifulSoup to parse HTML
+    """Extract relevant documentation links from HTML content."""
     soup = BeautifulSoup(html_content, 'html.parser')
-    
-    # Find all links
     links = set()
+    base_domain = urlparse(base_url).netloc
+
     for a in soup.find_all('a', href=True):
         href = a['href']
-        
-        # Skip empty links, fragments, and special links
-        if not href or href.startswith(('javascript:', 'mailto:', 'tel:')):
-            continue
-            
-        # Handle fragment-only links
-        if href.startswith('#'):
-            continue
-            
-        # Resolve relative URLs
         if not href.startswith(('http://', 'https://')):
             href = urljoin(base_url, href)
-            
-        # Parse the URL
+
         parsed = urlparse(href)
-        
-        # Only keep links from the same domain
-        if parsed.netloc == base_domain:
-            # Normalize the URL
-            normalized = href.split('#')[0]  # Remove fragments
-            normalized = normalized.rstrip('/')  # Remove trailing slash
-            
-            # Skip obvious non-content URLs
-            skip_patterns = [
-                '/search', '/tags/', '/categories/',  # Common doc site patterns
-                'index.xml', '.rss', '.atom',  # Feed URLs
-                '/page/', '/assets/', '/static/',  # Pagination and assets
-            ]
-            if any(pattern in normalized.lower() for pattern in skip_patterns):
-                continue
-                
-            if normalized:
-                links.add(normalized)
+        if parsed.netloc == base_domain or "docs" in parsed.netloc:
+            # Normalize URL by removing fragments and trailing slashes
+            normalized = href.split('#')[0].rstrip('/')
+            links.add(normalized)
     
-    return sorted(list(links))
+    return sorted(links)
 
 def extract_metadata(html_content):
     """Extract metadata from HTML content"""
@@ -335,12 +323,13 @@ def sanitize_filename(url):
     # Parse URL
     parsed = urlparse(url)
     
-    # Get path parts
+    # Get domain and path parts
+    domain = parsed.netloc
     path_parts = parsed.path.strip('/').split('/')
     
     # Handle empty path or trailing slash
-    if not path_parts[-1]:
-        path_parts[-1] = 'index'
+    if not path_parts or not path_parts[0]:
+        path_parts = ['index']
     
     # Clean up each part
     clean_parts = []
@@ -354,7 +343,8 @@ def sanitize_filename(url):
             part = part[:47] + '...'
         clean_parts.append(part)
     
-    return clean_parts
+    # Join with underscores and add domain
+    return f"{domain}_{'_'.join(clean_parts)}"
 
 def save_readable_text(markdown_content, output_path, include_links=True, include_sections=True):
     """
@@ -417,84 +407,101 @@ def save_readable_text(markdown_content, output_path, include_links=True, includ
         f.write(text.strip())
 
 def extract_readable_text(markdown_content):
-    """Extract clean readable text from markdown, preserving code and instructions"""
-    if not markdown_content:
-        return ""
+    """Extract clean readable text from markdown content"""
+    # Remove code blocks
+    text = re.sub(r'```[\s\S]*?```', '', markdown_content)
+    text = re.sub(r'`[^`]+`', '', text)
     
-    text = markdown_content
-    sections = []
+    # Remove URLs and links but keep link text
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    text = re.sub(r'https?://\S+', '', text)
     
-    # Split into sections based on headers
-    header_pattern = r'^#{1,6}\s+(.+)$'
-    current_section = []
-    current_header = "Introduction"
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
     
-    for line in text.split('\n'):
-        header_match = re.match(header_pattern, line)
-        if header_match:
-            if current_section:
-                sections.append((current_header, '\n'.join(current_section)))
-            current_header = header_match.group(1)
-            current_section = []
-        else:
-            current_section.append(line)
+    # Remove special characters and normalize whitespace
+    text = re.sub(r'[=\-\*•◦○●\[\]]+', '', text)
+    text = re.sub(r'\s+', ' ', text)
     
-    if current_section:
-        sections.append((current_header, '\n'.join(current_section)))
+    # Fix common encoding issues
+    text = text.replace('â€™', "'")
+    text = text.replace('â€"', "-")
+    text = text.replace('â€œ', '"')
+    text = text.replace('â€', '"')
+    text = text.replace('â€¢', '•')
+    text = text.replace('ðŸ˜…', '')  # Remove emojis
     
-    # Process each section
-    processed_sections = []
-    for header, content in sections:
-        processed = f"\n{header}\n{'=' * len(header)}\n"
-        
-        # Extract code blocks
-        code_blocks = re.finditer(r'```(\w+)?\n(.*?)```', content, re.DOTALL)
-        code_positions = []
-        for match in code_blocks:
-            lang = match.group(1) or 'text'
-            code = match.group(2)
-            code_positions.append({
-                'start': match.start(),
-                'end': match.end(),
-                'replacement': f"\nCode Example ({lang}):\n-------------------\n{code.strip()}\n"
-            })
-        
-        # Replace code blocks from end to start to maintain positions
-        for pos in reversed(code_positions):
-            content = content[:pos['start']] + pos['replacement'] + content[pos['end']:]
-        
-        # Handle inline code
-        content = re.sub(r'`([^`]+)`', r'<code>\1</code>', content)
-        
-        # Extract steps or instructions
-        step_pattern = r'^\s*(?:\d+\.|[-\*\+])\s+(.+)$'
-        lines = content.split('\n')
-        in_steps = False
-        step_buffer = []
-        
-        for line in lines:
-            if re.match(step_pattern, line):
-                if not in_steps:
-                    in_steps = True
-                    step_buffer.append("\nSteps:\n------")
-                step_buffer.append(re.sub(r'^\s*(?:\d+\.|[-\*\+])\s+', '• ', line))
-            else:
-                if in_steps:
-                    in_steps = False
-                    step_buffer.append("")
-                step_buffer.append(line)
-        
-        content = '\n'.join(step_buffer)
-        
-        # Clean up formatting but preserve structure
-        content = re.sub(r'\*\*([^\*]+)\*\*', r'[Important: \1]', content)  # Convert bold to semantic markup
-        content = re.sub(r'\*([^\*]+)\*', r'[Note: \1]', content)  # Convert italic to semantic markup
-        content = re.sub(r'_([^_]+)_', r'[Emphasis: \1]', content)  # Convert underscore to semantic markup
-        
-        processed += content + "\n"
-        processed_sections.append(processed)
+    # Split into paragraphs and clean each one
+    paragraphs = []
+    for p in text.split('\n'):
+        p = p.strip()
+        if p and len(p) > 20 and not is_navigation_text(p):
+            paragraphs.append(p)
     
-    return '\n'.join(processed_sections)
+    return '\n\n'.join(paragraphs)
+
+def create_condensed_summary(content, metadata):
+    """
+    Creates a condensed hierarchical summary of the content
+    Args:
+        content (str): The full content to summarize
+        metadata (dict): Metadata extracted from the page
+    Returns:
+        dict: Structured summary with core message, key points, and metadata
+    """
+    if not content:
+        return None
+        
+    # First clean and extract readable text
+    content = extract_readable_text(content)
+    if not content:
+        return None
+    
+    # Split into paragraphs
+    paragraphs = [p for p in content.split('\n\n') if p.strip()]
+    if not paragraphs:
+        return None
+    
+    # Extract core message from the first substantial paragraph
+    core_message = ""
+    for p in paragraphs:
+        words = p.split()
+        if len(words) >= 10:  # Look for a substantial paragraph
+            core_message = ' '.join(words[:25])
+            if not core_message.endswith(('.',',','!','?')):
+                core_message += '...'
+            break
+    
+    # Extract key points from subsequent paragraphs
+    key_points = []
+    for p in paragraphs[1:]:
+        # Skip very short paragraphs and navigation-like content
+        if len(p.split()) < 8 or is_navigation_text(p):
+            continue
+        
+        # Clean and add the point
+        if len(key_points) >= 5:  # Limit to 5 key points
+            break
+        key_points.append(p)
+    
+    # Extract technical terms
+    tech_terms = []
+    raw_terms = extract_technical_terms(content)
+    for term in raw_terms:
+        if len(tech_terms) >= 5:  # Limit to 5 terms
+            break
+        if len(term) > 2 and not is_navigation_text(term):
+            tech_terms.append(term)
+    
+    # Create the condensed summary structure
+    summary = {
+        "title": metadata.get("title", "").strip(),
+        "core_message": core_message,
+        "key_points": key_points,
+        "technical_terms": tech_terms
+    }
+    
+    return summary
 
 def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_category=None):
     """Save content in knowledge base format"""
@@ -543,7 +550,7 @@ def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_category=Non
             f.write(f"Purpose\n-------\n{content.summary}\n\n")
         
         if content.keywords:
-            f.write(f"Technical Scope\n--------------\n{', '.join(content.keywords)}\n\n")
+            f.write(f"Technical Scope\n--------------\n{', '.join(content.keywords) if content.keywords else 'None'}\n\n")
         
         f.write(extract_readable_text(content.markdown))
         
@@ -642,8 +649,8 @@ def save_unified_knowledge(content, output_dir, kb_root=None, kb_category=None):
         
         # Process content by sections
         sections = []
-        current_section = []
-        current_header = None
+        current_section = {"level": 0, "title": "", "content": [], "parameters": []}
+        code_blocks = []
         
         for line in content.markdown.split('\n'):
             header_match = re.match(r'^(#{1,6})\s+(.+)$', line)
@@ -733,277 +740,200 @@ def save_unified_knowledge(content, output_dir, kb_root=None, kb_category=None):
 
     return unified_file
 
-async def process_page(url, depth, max_depth, crawler, progress, output_dir, debug=False):
-    """Process a single page and return its links if within depth limit."""
-    if depth > max_depth:
-        return True, []
+def save_to_knowledge_base(result, output_dir):
+    """Save extracted content in structured knowledge base format."""
+    if not result or not result.success:
+        return None
+
+    # Parse HTML with BeautifulSoup
+    soup = BeautifulSoup(result.html, "html.parser")
+
+    # Extract Title
+    title = soup.find("title").text.strip() if soup.find("title") else "Untitled"
+
+    # Extract metadata
+    metadata = {
+        "url": result.url,
+        "title": title,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "word_count": len(result.markdown.split()),
+        "summary": result.markdown[:500],  # First 500 chars
+        "last_modified": soup.find("meta", attrs={"name": "last-modified"})["content"] if soup.find("meta", attrs={"name": "last-modified"}) else None,
+        "links": extract_page_links(result.html, result.url)
+    }
+
+    # Create safe filename
+    safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
+
+    # Save extracted Markdown
+    markdown_file = os.path.join(output_dir, safe_title + ".md")
+    with open(markdown_file, "w", encoding="utf-8") as f:
+        f.write(f"# {title}\n\n")
+        f.write(f"URL: {result.url}\n")
+        f.write(f"Extracted: {metadata['timestamp']}\n\n")
+        f.write("-" * 80 + "\n\n")
+        f.write(result.markdown)
+
+    # Save metadata as JSON
+    json_file = os.path.join(output_dir, safe_title + ".json")
+    with open(json_file, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
+    logger.info(f"📄 Saved: {markdown_file}, 📊 Metadata: {json_file}")
+    return markdown_file
+
+def clean_text(text):
+    """Clean text by removing special characters and normalizing whitespace"""
+    # Remove markdown links
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    
+    # Remove special characters and normalize whitespace
+    text = re.sub(r'[=\-\*•◦○●]+', '', text)  # Remove decorative characters
+    text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+    text = text.strip()
+    
+    # Fix common encoding issues
+    text = text.replace('â€™', "'")
+    text = text.replace('â€"', "-")
+    text = text.replace('â€œ', '"')
+    text = text.replace('â€', '"')
+    text = text.replace('â€¢', '•')
+    
+    return text
+
+def is_navigation_text(text):
+    """Check if text appears to be navigation or boilerplate content"""
+    nav_patterns = [
+        r'home|search|blog|changelog|quick\s+start|installation|deployment',
+        r'previous|next|menu|navigation',
+        r'copyright|terms|privacy|contact'
+    ]
+    return any(re.search(pattern, text.lower()) for pattern in nav_patterns)
+
+def ensure_url_scheme(url):
+    """Ensure URL has a proper scheme"""
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url.lstrip('/')
+    return url
+
+def format_condensed_summary(summary):
+    """Format a condensed summary into a readable string"""
+    if not summary:
+        return "No content could be extracted"
         
-    if debug:
-        logger.debug(f"Processing {url} (depth {depth}/{max_depth})")
+    output = []
     
-    # Get the page content
-    result = await crawler.arun(url, config=CRAWLER_CONFIG)
-    if not result.success:
-        logger.error(f"Failed to fetch page: {result.error_message}")
-        return False, []
+    # Add title
+    if summary.get("title"):
+        output.append(f"# {summary['title']}")
+        output.append("")
     
-    # Update progress
-    progress.current_depth = depth
-    progress.update()
-    stats = progress.get_stats()
-    logger.info(f"Progress: {stats['processed']}/{stats['total'] or '?'} pages, depth {depth}/{max_depth}, {stats['elapsed']} elapsed")
+    # Add core message if present
+    if summary.get("core_message"):
+        output.append("## Core Message")
+        output.append(summary["core_message"])
+        output.append("")
     
-    if debug:
-        logger.debug(f"Successfully fetched page")
-        logger.debug(f"HTML length: {len(result.html or '')}")
-        logger.debug(f"Markdown length: {len(result.markdown or '')}")
+    # Add key points if present
+    if summary.get("key_points"):
+        output.append("## Key Points")
+        for point in summary["key_points"]:
+            output.append(f"- {point}")
+        output.append("")
     
-    # Extract links from the page
-    links = extract_page_links(result.html, url)
-    if debug:
-        logger.debug(f"Found {len(links)} links on the page:")
-        for link in links[:5]:  
-            logger.debug(f"  - {link}")
-        if len(links) > 5:
-            logger.debug(f"  ... and {len(links) - 5} more")
+    # Add technical terms if present
+    if summary.get("technical_terms"):
+        output.append("## Technical Terms")
+        for term in summary["technical_terms"]:
+            output.append(f"- {term}")
+        output.append("")
     
-    # Generate safe filename from URL
-    path_parts = sanitize_filename(url)
+    return "\n".join(output)
+
+async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STANDARD):
+    """Crawl documentation pages and save structured content."""
+    os.makedirs(output_dir, exist_ok=True)
+    crawled_urls = set()
+    queue = asyncio.Queue()
+    progress = CrawlProgress(page_limit)
     
-    # Create subdirectories if needed
-    output_path = os.path.join(output_dir, *path_parts)
-    if not output_path.endswith('.json'):
-        output_path += '.json'
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # Add initial URLs to queue
+    for url in urls:
+        await queue.put(ensure_url_scheme(url))
     
-    # Save the content
-    content = CrawlResult()
-    content.url = url
-    content.html = result.html
-    content.markdown = result.markdown
-    content.links = links
-    content.success = result.success
-    metadata = extract_metadata(result.html)
-    content.title = metadata['title']
-    content.keywords = metadata['keywords']
-    content.last_modified = metadata['last_modified']
+    async with AsyncWebCrawler(BROWSER_CONFIG) as crawler:
+        while not queue.empty() and not progress.limit_reached():
+            url = await queue.get()
+            
+            if url in crawled_urls:
+                continue
+                
+            logger.info(f"Crawling {url}")
+            result = await safe_crawl(url)
+            
+            if result and result.success:
+                # Save content
+                save_to_knowledge_base(result, output_dir)
+                crawled_urls.add(url)
+                progress.increment()
+                
+                # Extract and queue new links
+                links = extract_page_links(result.html, url)
+                for link in links:
+                    if link not in crawled_urls and not progress.limit_reached():
+                        await queue.put(link)
+            else:
+                logger.error(f"Failed to crawl {url}")
     
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump({
-            'url': content.url,
-            'timestamp': datetime.datetime.now().isoformat(),
-            'html': content.html,
-            'markdown': content.markdown,
-            'links': content.links,
-            'title': content.title,
-            'keywords': content.keywords,
-            'last_modified': content.last_modified,
-            'depth': depth,
-            'stats': progress.get_stats()
-        }, f, indent=2, ensure_ascii=False)
-    
-    if debug:
-        logger.debug(f"Content saved to {output_path}")
-    
-    # Save readable text
-    text_path = os.path.splitext(output_path)[0] + '.txt'
-    save_readable_text(result.markdown, text_path)
-    
-    if debug:
-        logger.debug(f"Readable text saved to {text_path}")
-    
-    # Save knowledge base entry
-    unified_file = save_unified_knowledge(content, os.path.dirname(output_path))
-    
-    if debug:
-        logger.debug(f"Unified knowledge file saved to {unified_file}")
-    
-    return True, links if depth < max_depth else []
+    return len(crawled_urls)
 
 async def main():
-    parser = argparse.ArgumentParser(
-        description=f'WebSum v{VERSION} - Website Content Extractor for LLM Training',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument('url', help='URL to crawl')
-    parser.add_argument('--depth', type=int, default=1, help='Maximum crawl depth')
-    parser.add_argument('--debug', action='store_true', help='Enable debug output')
-    parser.add_argument('--output-dir', help='Output directory (default: scraped_data/YYYYMMDD_HHMMSS)')
-    parser.add_argument('--page-limit', type=int, help='Maximum number of pages to crawl')
-    parser.add_argument('--rate-limit', type=float, default=1.0, 
-                      help='Minimum delay between requests in seconds')
-    parser.add_argument('--no-cache', action='store_true',
-                      help='Disable URL caching (process all URLs even if seen before)')
-    parser.add_argument('--cache-file', default='url_cache.json',
-                      help='File to store URL cache (default: url_cache.json)')
-    parser.add_argument('--merge-cache', 
-                      help='Merge another cache file into the current cache')
-    
-    # Knowledge base options
-    kb_group = parser.add_argument_group('Knowledge Base Options')
-    kb_group.add_argument('--kb-root', default='knowledge_base',
-                       help='Root directory for knowledge base')
-    kb_group.add_argument('--kb-category', 
-                       help='Category for the content (e.g., python/web-scraping)')
-    kb_group.add_argument('--kb-title',
-                       help='Title for the content (default: extracted from page)')
-    kb_group.add_argument('--kb-summary',
-                       help='Brief summary of the content')
-    kb_group.add_argument('--kb-keywords',
-                       help='Comma-separated keywords')
-    kb_group.add_argument('--kb-format', choices=['flat', 'hierarchical'], default='hierarchical',
-                       help='Knowledge base organization format')
-    
+    """Main entry point"""
+    parser = argparse.ArgumentParser(description='Crawl and summarize web content')
+    parser.add_argument('urls', nargs='+', help='URLs to crawl')
+    parser.add_argument('--output-dir', '-o', default='crawl_output', help='Output directory')
+    parser.add_argument('--page-limit', '-l', type=int, help='Maximum pages to crawl')
+    parser.add_argument('--format', '-f', choices=['standard', 'condensed'], default='standard', help='Summary format')
+    parser.add_argument('--test', action='store_true', help='Test mode - crawl single page')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     args = parser.parse_args()
     
     # Configure logging
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-        logger.debug("Debug mode enabled")
-        logger.debug(f"Rate limit: {args.rate_limit} seconds")
-    
-    # Handle cache merge if requested
-    if args.merge_cache:
-        cache = URLCache(cache_file=args.cache_file)
-        merged_count = cache.merge(args.merge_cache)
-        logger.info(f"Merged {merged_count} URLs from {args.merge_cache}")
-        if args.debug:
-            stats = cache.get_stats()
-            logger.debug(f"Cache now contains {stats['total_urls']} URLs with {stats['total_visits']} total visits")
-        return 0
-    
-    # Initialize progress tracking
-    progress = CrawlProgress(page_limit=args.page_limit)
-    progress.start()
-    
-    # Ensure URL has scheme
-    url = ensure_url_scheme(args.url)
-    if args.debug:
-        logger.debug(f"URL with scheme: {url}")
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
     
     # Create output directory
-    if not args.output_dir:
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        args.output_dir = os.path.join('scraped_data', timestamp)
-    os.makedirs(args.output_dir, exist_ok=True)
+    output_dir = os.path.abspath(args.output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    logger.debug(f"Using output directory: {output_dir}")
     
-    if args.debug:
-        logger.debug(f"Output directory: {args.output_dir}")
-    
-    try:
-        # First try to get the page directly
-        async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
-            if args.debug:
-                logger.debug(f"Fetching {url}")
+    # Process URLs
+    if args.test:
+        # Test mode - single page
+        for url in args.urls:
+            url = ensure_url_scheme(url)
+            logger.info(f"Testing extraction on {url}")
             
-            result = await crawler.arun(url, config=CRAWLER_CONFIG)
-            
-            if not result.success:
-                logger.error(f"Failed to fetch page: {result.error_message}")
-                return 1
-            
-            # Update progress
-            progress.update()
-            stats = progress.get_stats()
-            logger.info(f"Progress: {stats['processed']}/{stats['total'] or '?'} pages, {stats['elapsed']} elapsed")
-            
-            if args.debug:
-                logger.debug(f"Successfully fetched page")
-                logger.debug(f"HTML length: {len(result.html or '')}")
-                logger.debug(f"Markdown length: {len(result.markdown or '')}")
-            
-            # Extract links from the page
-            links = extract_page_links(result.html, url)
-            if args.debug:
-                logger.debug(f"Found {len(links)} links on the page:")
-                for link in links[:5]:  
-                    logger.debug(f"  - {link}")
-                if len(links) > 5:
-                    logger.debug(f"  ... and {len(links) - 5} more")
-            
-            # Save the content
-            output_file = os.path.join(args.output_dir, 'content.json')
-            content = CrawlResult()
-            content.url = url
-            content.html = result.html
-            content.markdown = result.markdown
-            content.links = links
-            content.success = result.success
-            metadata = extract_metadata(result.html)
-            content.title = metadata['title']
-            content.keywords = metadata['keywords']
-            content.last_modified = metadata['last_modified']
-            
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    'url': content.url,
-                    'timestamp': datetime.datetime.now().isoformat(),
-                    'html': content.html,
-                    'markdown': content.markdown,
-                    'links': content.links,
-                    'title': content.title,
-                    'keywords': content.keywords,
-                    'last_modified': content.last_modified,
-                    'stats': progress.get_stats()  
-                }, f, indent=2, ensure_ascii=False)
-            
-            if args.debug:
-                logger.debug(f"Content saved to {output_file}")
-            
-            # Save readable text
-            readable_text_file = os.path.join(args.output_dir, 'readable_text.txt')
-            save_readable_text(result.markdown, readable_text_file)
-            
-            if args.debug:
-                logger.debug(f"Readable text saved to {readable_text_file}")
-            
-            # Save knowledge base entry
-            if args.kb_root and args.kb_category:
-                content.categories = [args.kb_category]
-                if args.kb_title:
-                    content.title = args.kb_title
-                if args.kb_summary:
-                    content.summary = args.kb_summary
-                if args.kb_keywords:
-                    content.keywords = [k.strip() for k in args.kb_keywords.split(',')]
-                
-                unified_file = save_unified_knowledge(content, args.output_dir, args.kb_root, args.kb_category)
-                if args.debug:
-                    logger.debug(f"Unified knowledge file saved to {unified_file}")
+            result = await safe_crawl(url)
+            logger.debug(f"Crawl result: success={result.success if result else 'None'}")
+            if result and result.success:
+                if result.html:
+                    logger.debug(f"HTML content length: {len(result.html)}")
+                if result.markdown:
+                    logger.debug(f"Markdown content length: {len(result.markdown)}")
+                output_file = save_to_knowledge_base(result, output_dir)
+                logger.info(f"Content saved to {output_file}")
             else:
-                unified_file = save_unified_knowledge(content, args.output_dir)
-            
-            if args.debug:
-                logger.debug(f"Unified knowledge file saved to {unified_file}")
-            
-            # Process links
-            to_process = [(link, 1) for link in links]
-            rate_limiter = RateLimiter(delay_seconds=args.rate_limit)
-            url_cache = URLCache(cache_file=args.cache_file, enabled=not args.no_cache)
-            
-            if args.debug and not args.no_cache:
-                stats = url_cache.get_stats()
-                logger.debug(f"URL cache loaded: {stats['total_urls']} URLs, {stats['total_visits']} total visits")
-            
-            while to_process and progress.should_process_more():
-                link, depth = to_process.pop(0)
-                if url_cache.has_url(link):
-                    if args.debug:
-                        logger.debug(f"Skipping cached URL: {link}")
-                    continue
-                url_cache.add_url(link)
-                await rate_limiter.wait()
-                success, new_links = await process_page(link, depth, args.depth, crawler, progress, args.output_dir, debug=args.debug)
-                if success:
-                    to_process.extend([(new_link, depth + 1) for new_link in new_links])
-            
-            return 0
-            
-    except Exception as e:
-        logger.error(f"Error processing page: {e}")
-        if args.debug:
-            logger.exception("Full traceback:")
-        return 1
+                error_msg = result.error if result and hasattr(result, 'error') else "Unknown error"
+                logger.error(f"Failed to extract content from {url}: {error_msg}")
+    else:
+        # Normal mode - crawl with link following
+        format = SummaryFormat.CONDENSED if args.format == 'condensed' else SummaryFormat.STANDARD
+        total_pages = await crawl_docs(args.urls, output_dir, args.page_limit, format)
+        logger.info(f"Crawled {total_pages} pages")
 
 if __name__ == "__main__":
     asyncio.run(main())
