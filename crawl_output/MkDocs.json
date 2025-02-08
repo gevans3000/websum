@@ -1,0 +1,30 @@
+{
+  "url": "http://www.mkdocs.org",
+  "title": "MkDocs",
+  "timestamp": "2025-02-08T13:26:30.604041",
+  "word_count": 319,
+  "summary": "[MkDocs](http://www.mkdocs.org/<.>)\n  * [Home](http://www.mkdocs.org/<.>)\n  * [Getting Started](http://www.mkdocs.org/<getting-started/>)\n  * [User Guide ](http://www.mkdocs.org/<#>)\n    * [User Guide](http://www.mkdocs.org/<user-guide/>)\n    * [Installation](http://www.mkdocs.org/<user-guide/installation/>)\n    * [Writing Your Docs](http://www.mkdocs.org/<user-guide/writing-your-docs/>)\n    * [Choosing Your Theme](http://www.mkdocs.org/<user-guide/choosing-your-theme/>)\n    * [Customizing Your ",
+  "last_modified": null,
+  "links": [
+    "http://www.mkdocs.org",
+    "http://www.mkdocs.org/about/contributing",
+    "http://www.mkdocs.org/about/license",
+    "http://www.mkdocs.org/about/release-notes",
+    "http://www.mkdocs.org/dev-guide",
+    "http://www.mkdocs.org/dev-guide/api",
+    "http://www.mkdocs.org/dev-guide/plugins",
+    "http://www.mkdocs.org/dev-guide/themes",
+    "http://www.mkdocs.org/dev-guide/translations",
+    "http://www.mkdocs.org/getting-started",
+    "http://www.mkdocs.org/user-guide",
+    "http://www.mkdocs.org/user-guide/choosing-your-theme",
+    "http://www.mkdocs.org/user-guide/cli",
+    "http://www.mkdocs.org/user-guide/configuration",
+    "http://www.mkdocs.org/user-guide/customizing-your-theme",
+    "http://www.mkdocs.org/user-guide/deploying-your-docs",
+    "http://www.mkdocs.org/user-guide/installation",
+    "http://www.mkdocs.org/user-guide/localizing-your-theme",
+    "http://www.mkdocs.org/user-guide/writing-your-docs",
+    "https://www.mkdocs.org"
+  ]
+}
