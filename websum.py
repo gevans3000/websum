@@ -16,7 +16,7 @@ from crawl4ai import (
 )
 from crawl4ai.content_filter_strategy import PruningContentFilter, BM25ContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from crawl4ai.extraction_strategy import ExtractionStrategy, CosineStrategy
+from crawl4ai.extraction_strategy import ExtractionStrategy, CosineStrategy, JsonCssExtractionStrategy
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 from bs4 import BeautifulSoup, NavigableString
@@ -35,33 +35,46 @@ VERSION = "1.0.0"
 BROWSER_CONFIG = BrowserConfig(
     browser_type="chromium",
     headless=True,
-    viewport_width=1920,
+    viewport_width=1280,
     viewport_height=1080,
     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    verbose=True,
     ignore_https_errors=True
 )
+
+# Content extraction strategy
+EXTRACTION_STRATEGY = JsonCssExtractionStrategy({
+    "name": "Documentation Extraction",
+    "baseSelector": ".md-content__inner",
+    "fields": [
+        {"name": "title", "selector": "h1", "type": "text"},
+        {"name": "content", "selector": ".md-typeset", "type": "text"},
+        {"name": "code_blocks", "selector": "pre code", "type": "text"}
+    ]
+})
 
 # Crawler configuration
 CRAWLER_CONFIG = CrawlerRunConfig(
     word_count_threshold=3,
     scan_full_page=True,
-    wait_until="networkidle",  # Wait for full JS execution
-    page_timeout=90000,  # 90 sec timeout for large pages
-    css_selector=".md-content__inner, .md-typeset, table.docutils, pre code",
+    wait_until="networkidle",
+    page_timeout=90000,
+    extraction_strategy=EXTRACTION_STRATEGY,
     process_iframes=True,
     remove_overlay_elements=True,
     cache_mode=CacheMode.BYPASS,
-    exclude_external_links=False
+    exclude_external_links=False,
+    excluded_tags=['nav', 'footer', 'header', 'script']
 )
 
-# Markdown generator with enhanced formatting
+# Markdown generator configuration
 MARKDOWN_GENERATOR = DefaultMarkdownGenerator(
     options={
-        "preserve_tables": True,  # Keeps technical parameter tables
-        "retain_code_blocks": True,  # Preserves syntax-highlighted code
-        "escape_html": False,  # Avoids unnecessary escaping
+        "preserve_tables": True,
+        "retain_code_blocks": True,
+        "escape_html": False,
         "inline_code_format": "backticks",
-        "strip_comments": True  
+        "strip_comments": True
     }
 )
 
@@ -73,13 +86,6 @@ class SummaryFormat(Enum):
 os.environ["CRAWL4AI_MAX_BUFFER_SIZE"] = "1000000"  # 1MB buffer
 os.environ["CRAWL4AI_CHUNK_SIZE"] = "524288"  # 512KB chunks
 os.environ["CRAWL4AI_STREAM_MODE"] = "True"
-
-# Content extraction strategy
-EXTRACTION_STRATEGY = CosineStrategy(
-    target_content_type="documentation",
-    word_count_threshold=10,
-    similarity_threshold=0.7
-)
 
 class CrawlProgress:
     """Track crawl progress"""
@@ -750,6 +756,7 @@ def save_to_knowledge_base(result, output_dir):
 
     # Extract Title
     title = soup.find("title").text.strip() if soup.find("title") else "Untitled"
+    title = re.sub(r'\s*-\s*Crawl4AI Documentation.*$', '', title)  # Clean up title
 
     # Extract metadata
     metadata = {
@@ -765,14 +772,20 @@ def save_to_knowledge_base(result, output_dir):
     # Create safe filename
     safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
 
+    # Process markdown content
+    markdown_content = result.markdown
+
+    # Fix code block formatting
+    markdown_content = re.sub(r'`([^`]+)`', lambda m: format_code_block(m.group(1)), markdown_content)
+
+    # Fix text formatting
+    markdown_content = format_text_content(markdown_content)
+
     # Save extracted Markdown
     markdown_file = os.path.join(output_dir, safe_title + ".md")
     with open(markdown_file, "w", encoding="utf-8") as f:
         f.write(f"# {title}\n\n")
-        f.write(f"URL: {result.url}\n")
-        f.write(f"Extracted: {metadata['timestamp']}\n\n")
-        f.write("-" * 80 + "\n\n")
-        f.write(result.markdown)
+        f.write(markdown_content)
 
     # Save metadata as JSON
     json_file = os.path.join(output_dir, safe_title + ".json")
@@ -782,6 +795,132 @@ def save_to_knowledge_base(result, output_dir):
     logger.info(f"📄 Saved: {markdown_file}, 📊 Metadata: {json_file}")
     return markdown_file
 
+def format_code_block(code):
+    """Format code block with proper markdown syntax and indentation."""
+    # Detect if this is a Python code block
+    is_python = bool(re.search(r'(import\s+\w+|from\s+\w+\s+import|def\s+\w+|class\s+\w+|async\s+def)', code))
+    
+    # Clean up the code
+    code = code.strip()
+    
+    # Format Python code
+    if is_python:
+        try:
+            # Split into lines
+            lines = code.split('\n')
+            
+            # Remove empty lines at start/end while preserving internal empty lines
+            while lines and not lines[0].strip():
+                lines.pop(0)
+            while lines and not lines[-1].strip():
+                lines.pop()
+            
+            # Find common indentation
+            def get_indentation(line):
+                return len(line) - len(line.lstrip()) if line.strip() else None
+            
+            indentation_levels = [get_indentation(line) for line in lines if get_indentation(line) is not None]
+            if indentation_levels:
+                common_indent = min(indentation_levels)
+                # Remove common indentation
+                lines = [line[common_indent:] if line.strip() else '' for line in lines]
+            
+            # Join lines back together
+            code = '\n'.join(lines)
+            
+            # Add proper line breaks for readability
+            code = re.sub(r'(\s*import\s+[^;]+?;?\s*$)', r'\1\n', code, flags=re.MULTILINE)  # After imports
+            code = re.sub(r'(\s*from\s+[^;]+?import[^;]+?;?\s*$)', r'\1\n', code, flags=re.MULTILINE)  # After from imports
+            code = re.sub(r'(\s*class\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before class
+            code = re.sub(r'(\s*def\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before function
+            code = re.sub(r'(\s*async\s+def\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before async function
+            
+            # Fix indentation for multi-line strings
+            code = re.sub(r'(["\'\"]).*?\1', lambda m: m.group().replace('\n', '\n    '), code, flags=re.DOTALL)
+            
+        except Exception as e:
+            logger.warning(f"Error formatting Python code: {e}")
+    
+    # Add language hint for syntax highlighting
+    lang = "python" if is_python else ""
+    
+    return f"\n```{lang}\n{code}\n```\n"
+
+def format_text_content(content):
+    """Format text content to preserve document structure."""
+    # Split content into sections
+    sections = re.split(r'\n\s*\n+', content)
+    formatted_sections = []
+
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+
+        # Check if it's a code block
+        if section.startswith('`'):
+            formatted_sections.append(section)
+            continue
+
+        # Format headings (starts with capital letter, ends with colon or period)
+        if re.match(r'^[A-Z][^.!?]*(?:[.!?]|\s*:)$', section.split('\n')[0]):
+            heading = section.split('\n')[0].rstrip(':.')
+            rest = '\n'.join(section.split('\n')[1:])
+            formatted_sections.append(f"\n## {heading}\n\n{rest}")
+            continue
+
+        # Format subheadings
+        if re.match(r'^(?:Example|Advanced|Note|Option|Step)[^.!?]*(?:[.!?]|\s*:)', section.split('\n')[0]):
+            heading = section.split('\n')[0].rstrip(':.')
+            rest = '\n'.join(section.split('\n')[1:])
+            formatted_sections.append(f"\n### {heading}\n\n{rest}")
+            continue
+
+        # Format numbered lists
+        if re.match(r'^\d+\.\s', section):
+            lines = section.split('\n')
+            formatted_lines = []
+            current_indent = 0
+            for line in lines:
+                # Detect list items and their indentation
+                if re.match(r'^\d+\.\s', line):
+                    current_indent = len(line) - len(line.lstrip())
+                    formatted_lines.append(line.strip())
+                else:
+                    # Preserve indentation for sub-items
+                    indented_line = ' ' * current_indent + '- ' + line.strip()
+                    formatted_lines.append(indented_line)
+            formatted_sections.append('\n'.join(formatted_lines))
+            continue
+
+        # Format bullet points
+        if re.match(r'^[-*•]\s', section):
+            lines = section.split('\n')
+            formatted_lines = []
+            for line in lines:
+                if re.match(r'^[-*•]\s', line):
+                    formatted_lines.append(line.strip())
+                else:
+                    formatted_lines.append('  ' + line.strip())
+            formatted_sections.append('\n'.join(formatted_lines))
+            continue
+
+        # Format normal paragraphs
+        lines = section.split('\n')
+        formatted_lines = []
+        for line in lines:
+            formatted_lines.append(line.strip())
+        formatted_sections.append(' '.join(formatted_lines))
+
+    # Join sections with proper spacing
+    formatted_content = '\n\n'.join(formatted_sections)
+    
+    # Fix extra newlines around headings
+    formatted_content = re.sub(r'\n{3,}##', '\n\n##', formatted_content)
+    formatted_content = re.sub(r'\n{3,}###', '\n\n###', formatted_content)
+    
+    return formatted_content
+
 def clean_text(text):
     """Clean text by removing special characters and normalizing whitespace"""
     # Remove markdown links
@@ -789,7 +928,7 @@ def clean_text(text):
     
     # Remove special characters and normalize whitespace
     text = re.sub(r'[=\-\*•◦○●]+', '', text)  # Remove decorative characters
-    text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text)  # Normalize spaces and tabs
     text = text.strip()
     
     # Fix common encoding issues
@@ -887,6 +1026,37 @@ async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STA
     
     return len(crawled_urls)
 
+def get_default_config():
+    """Get optimized configuration for documentation extraction."""
+    return {
+        'browser_config': {
+            'headless': True,
+            'viewport_width': 1280,
+            'viewport_height': 900
+        },
+        'crawler_config': {
+            'word_count_threshold': 3,  # Lower for documentation
+            'scan_full_page': True,
+            'wait_until': 'networkidle',
+            'excluded_tags': ['nav', 'footer', 'header', 'script'],
+            'css_selector': '.md-main__inner, .md-content__inner, .md-typeset h1, .md-typeset h2, .md-typeset h3, .md-typeset pre, .md-typeset code, .md-typeset ul, .md-typeset ol, .md-typeset p',
+            'process_iframes': True,
+            'remove_overlay_elements': True,
+            'cache_mode': 'BYPASS'  # Fresh content for docs
+        }
+    }
+
+async def extract_documentation(url):
+    """Extract documentation with optimized settings."""
+    config = get_default_config()
+    
+    browser_config = BrowserConfig(**config['browser_config'])
+    crawler_config = CrawlerRunConfig(**config['crawler_config'])
+    
+    async with AsyncWebCrawler(browser_config) as crawler:
+        result = await crawler.arun(url=url, config=crawler_config)
+        return result
+
 async def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Crawl and summarize web content')
@@ -934,6 +1104,156 @@ async def main():
         format = SummaryFormat.CONDENSED if args.format == 'condensed' else SummaryFormat.STANDARD
         total_pages = await crawl_docs(args.urls, output_dir, args.page_limit, format)
         logger.info(f"Crawled {total_pages} pages")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+def clean_markdown(text):
+    """Clean and format markdown text."""
+    if not text:
+        return ""
+    
+    # Remove extra newlines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    # Fix code block formatting
+    text = re.sub(r'`` ```', '```', text)
+    text = re.sub(r'``` `', '```', text)
+    
+    # Fix bold formatting
+    text = re.sub(r'\*\*\s+```', '**```', text)
+    text = re.sub(r'```\s+\*\*', '```**', text)
+    
+    # Fix list formatting
+    text = re.sub(r'(\d+)\.\s+\*\*', r'\1. **', text)
+    
+    return text.strip()
+
+def process_code(code_text):
+    """Process and format code blocks."""
+    code = code_text.strip()
+    lang = "python" if any(keyword in code for keyword in ["import", "def", "class", "async"]) else ""
+    return f"\n```{lang}\n{code}\n```\n"
+
+def process_markdown_content(content):
+    """Process markdown content with proper formatting."""
+    if not content:
+        return ""
+    
+    # Clean up markdown formatting
+    content = clean_markdown(content)
+    
+    # Fix code block formatting
+    def format_code(match):
+        return process_code(match.group(1))
+    
+    content = re.sub(r'```(.*?)```', format_code, content, flags=re.DOTALL)
+    
+    return content
+
+async def process_url(url, output_dir=None, test=False):
+    """Process a single URL."""
+    try:
+        # Extract content
+        async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
+            result = await crawler.arun(url=url, config=CRAWLER_CONFIG)
+            
+            if not result or not result.markdown:
+                logger.warning(f"No content extracted from {url}")
+                return None
+            
+            # Process markdown content
+            markdown_content = process_markdown_content(result.markdown)
+            
+            if output_dir:
+                # Save markdown file
+                title = sanitize_filename(result.title or "Untitled")
+                md_file = os.path.join(output_dir, f"{title}.md")
+                with open(md_file, 'w', encoding='utf-8') as f:
+                    f.write(f"# {title}\n\n{markdown_content}")
+                
+                # Save metadata
+                json_file = os.path.join(output_dir, f"{title}.json")
+                metadata = {
+                    'url': url,
+                    'title': result.title,
+                    'timestamp': result.timestamp.isoformat(),
+                    'word_count': result.word_count,
+                    'summary': result.markdown[:500],
+                    'last_modified': result.last_modified,
+                    'links': result.links
+                }
+                with open(json_file, 'w', encoding='utf-8') as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+            
+            return markdown_content if test else None
+            
+    except Exception as e:
+        logger.error(f"Error processing {url}: {e}")
+        return None
+
+def sanitize_filename(title):
+    """Create a safe filename."""
+    return "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
+
+def process_markdown(result):
+    """Process markdown result."""
+    if not result or not result.markdown:
+        return ""
+    
+    # Clean and format the markdown
+    markdown = clean_markdown(result.markdown)
+    
+    # Add metadata
+    metadata = {
+        'url': result.url,
+        'title': result.title,
+        'timestamp': result.timestamp.isoformat(),
+        'word_count': result.word_count,
+        'summary': result.summary,
+        'last_modified': result.last_modified,
+        'links': result.links
+    }
+    
+    return markdown
+
+def process_url(url, output_dir=None, test=False):
+    """Process a single URL."""
+    if not url:
+        return None
+    
+    if not output_dir:
+        output_dir = os.path.join(os.getcwd(), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Extract content
+    result = extract_documentation(url)
+    if not result or not result.success:
+        return None
+    
+    # Save to knowledge base
+    output_file = save_to_knowledge_base(result, output_dir)
+    return output_file
+
+def sanitize_filename(title):
+    """Create a safe filename."""
+    return "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
+
+def process_markdown(result):
+    """Process markdown result."""
+    if not result or not result.success:
+        return None
+    
+    # Process markdown
+    markdown = result.markdown
+    if not markdown:
+        return None
+    
+    # Clean and format
+    markdown = clean_markdown(markdown)
+    markdown = process_markdown_content(markdown)
+    
+    return markdown
 
 if __name__ == "__main__":
     asyncio.run(main())
