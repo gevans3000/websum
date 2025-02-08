@@ -24,6 +24,139 @@ from enum import Enum, auto
 import datetime
 import time
 
+# Utility functions
+def clean_text(text):
+    """Clean text by removing special characters and normalizing whitespace"""
+    # Remove markdown links
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    
+    # Remove special characters and normalize whitespace
+    text = re.sub(r'[=\-\*•◦○●]+', '', text)  # Remove decorative characters
+    text = re.sub(r'\s+', ' ', text)  # Normalize spaces and tabs
+    text = text.strip()
+    
+    # Fix common encoding issues
+    text = text.replace('â€™', "'")
+    text = text.replace('â€"', "-")
+    text = text.replace('â€œ', '"')
+    text = text.replace('â€', '"')
+    text = text.replace('â€¢', '•')
+    
+    return text
+
+def is_navigation_text(text):
+    """Check if text appears to be navigation or boilerplate content"""
+    nav_patterns = [
+        r'home|search|blog|changelog|quick\s+start|installation|deployment',
+        r'previous|next|menu|navigation',
+        r'copyright|terms|privacy|contact'
+    ]
+    return any(re.search(pattern, text.lower()) for pattern in nav_patterns)
+
+def ensure_url_scheme(url):
+    """Ensure URL has a proper scheme"""
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url.lstrip('/')
+    return url
+
+def clean_markdown(text):
+    """Clean and format markdown text."""
+    if not text:
+        return ""
+    
+    # Remove extra newlines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    # Fix code block formatting
+    text = re.sub(r'`` ```', '```', text)
+    text = re.sub(r'``` `', '```', text)
+    
+    # Fix bold formatting
+    text = re.sub(r'\*\*\s+```', '**```', text)
+    text = re.sub(r'```\s+\*\*', '```**', text)
+    
+    # Fix list formatting
+    text = re.sub(r'(\d+)\.\s+\*\*', r'\1. **', text)
+    
+    return text.strip()
+
+def process_code(code_text):
+    """Process and format code blocks."""
+    code = code_text.strip()
+    lang = "python" if any(keyword in code for keyword in ["import", "def", "class", "async"]) else ""
+    return f"\n```{lang}\n{code}\n```\n"
+
+def process_markdown_content(content):
+    """Process markdown content with proper formatting."""
+    if not content:
+        return ""
+    
+    # Clean up markdown formatting
+    content = clean_markdown(content)
+    
+    # Fix code block formatting
+    def format_code(match):
+        return process_code(match.group(1))
+    
+    content = re.sub(r'```(.*?)```', format_code, content, flags=re.DOTALL)
+    
+    return content
+
+def format_code_block(code):
+    """Format code block with proper markdown syntax and indentation."""
+    # Detect if this is a Python code block
+    is_python = bool(re.search(r'(import\s+\w+|from\s+\w+\s+import|def\s+\w+|class\s+\w+|async\s+def)', code))
+    
+    # Clean up the code
+    code = code.strip()
+    
+    # Format Python code
+    if is_python:
+        try:
+            # Split into lines
+            lines = code.split('\n')
+            
+            # Remove empty lines at start/end while preserving internal empty lines
+            while lines and not lines[0].strip():
+                lines.pop(0)
+            while lines and not lines[-1].strip():
+                lines.pop()
+            
+            # Find common indentation
+            def get_indentation(line):
+                return len(line) - len(line.lstrip()) if line.strip() else None
+            
+            indentation_levels = [get_indentation(line) for line in lines if get_indentation(line) is not None]
+            if indentation_levels:
+                common_indent = min(indentation_levels)
+                # Remove common indentation
+                lines = [line[common_indent:] if line.strip() else '' for line in lines]
+            
+            # Join lines back together
+            code = '\n'.join(lines)
+            
+            # Add proper line breaks for readability
+            code = re.sub(r'(\s*import\s+[^;]+?;?\s*$)', r'\1\n', code, flags=re.MULTILINE)  # After imports
+            code = re.sub(r'(\s*from\s+[^;]+?import[^;]+?;?\s*$)', r'\1\n', code, flags=re.MULTILINE)  # After from imports
+            code = re.sub(r'(\s*class\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before class
+            code = re.sub(r'(\s*def\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before function
+            code = re.sub(r'(\s*async\s+def\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before async function
+            
+            # Fix indentation for multi-line strings
+            code = re.sub(r'(["\'\"]).*?\1', lambda m: m.group().replace('\n', '\n    '), code, flags=re.DOTALL)
+            
+        except Exception as e:
+            logger.warning(f"Error formatting Python code: {e}")
+    
+    # Add language hint for syntax highlighting
+    lang = "python" if is_python else ""
+    
+    return f"\n```{lang}\n{code}\n```\n"
+
+def format_text_content(text):
+    """Format text content with proper line breaks"""
+    return text.replace("\n\n", "\n")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,15 +165,15 @@ logger = logging.getLogger(__name__)
 VERSION = "1.0.0"
 
 # Browser configuration
-BROWSER_CONFIG = BrowserConfig(
-    browser_type="chromium",
-    headless=True,
-    viewport_width=1280,
-    viewport_height=1080,
-    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    verbose=True,
-    ignore_https_errors=True
-)
+BROWSER_CONFIG = {
+    'browser_type': "chromium",
+    'headless': True,
+    'viewport_width': 1280,
+    'viewport_height': 1080,
+    'user_agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    'verbose': False,
+    'ignore_https_errors': True
+}
 
 # Content extraction strategy
 EXTRACTION_STRATEGY = JsonCssExtractionStrategy({
@@ -56,13 +189,12 @@ EXTRACTION_STRATEGY = JsonCssExtractionStrategy({
 # Crawler configuration
 CRAWLER_CONFIG = CrawlerRunConfig(
     word_count_threshold=3,
-    scan_full_page=True,
     wait_until="networkidle",
-    page_timeout=90000,
+    page_timeout=30000,
     extraction_strategy=EXTRACTION_STRATEGY,
     process_iframes=True,
     remove_overlay_elements=True,
-    cache_mode=CacheMode.BYPASS,
+    cache_mode=CacheMode.ENABLED,
     exclude_external_links=False,
     excluded_tags=['nav', 'footer', 'header', 'script']
 )
@@ -99,10 +231,16 @@ class CrawlProgress:
         if self.page_limit is None:
             return True
         return self.pages_processed < self.page_limit
-    
+        
     def update(self):
         """Update progress after processing a page"""
         self.pages_processed += 1
+        
+    def limit_reached(self):
+        """Check if page limit has been reached"""
+        if self.page_limit is None:
+            return False
+        return self.pages_processed >= self.page_limit
 
 class RateLimiter:
     """Simple rate limiter to prevent overwhelming servers"""
@@ -200,9 +338,6 @@ class CrawlResult:
 async def crawl_page(url, crawler_config=None):
     """Crawl a page and return structured content"""
     try:
-        # Configure browser for optimal content extraction
-        browser_config = BROWSER_CONFIG
-        
         # Configure crawler with optimized settings
         if crawler_config is None:
             crawler_config = CRAWLER_CONFIG
@@ -210,7 +345,7 @@ async def crawl_page(url, crawler_config=None):
         result = CrawlResult()
         result.url = url
         
-        async with AsyncWebCrawler(browser_config) as crawler:
+        async with AsyncWebCrawler() as crawler:
             crawl_result = await crawler.arun(url=url, config=crawler_config)
             
             if crawl_result.success:
@@ -259,18 +394,17 @@ async def safe_crawl(url):
     retries = 3
     for attempt in range(retries):
         try:
-            async with AsyncWebCrawler(browser_config=BROWSER_CONFIG) as crawler:
-                result = await crawler.arun(url, config=CRAWLER_CONFIG)
+            async with AsyncWebCrawler() as crawler:
+                result = await crawler.arun(url=url, config=CRAWLER_CONFIG)
                 if result.success:
                     logger.info(f"✅ Successfully crawled: {url}")
                     return result
                 else:
-                    logger.warning(f"⚠️ Attempt {attempt+1}/{retries} failed for {url}: {result.error}")
+                    logger.warning(f"❌ Failed to crawl {url} (attempt {attempt + 1}): {result.error}")
         except Exception as e:
-            logger.error(f"❌ Error crawling {url}: {str(e)}")
-            if attempt < retries - 1:
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
-    logger.error(f"⛔ Failed to crawl {url} after {retries} attempts.")
+            logger.error(f"Error crawling {url} (attempt {attempt + 1}): {str(e)}")
+            await asyncio.sleep(2 ** attempt)  # Exponential backoff
+    
     return None
 
 def extract_page_links(html_content, base_url):
@@ -795,235 +929,50 @@ def save_to_knowledge_base(result, output_dir):
     logger.info(f"📄 Saved: {markdown_file}, 📊 Metadata: {json_file}")
     return markdown_file
 
-def format_code_block(code):
-    """Format code block with proper markdown syntax and indentation."""
-    # Detect if this is a Python code block
-    is_python = bool(re.search(r'(import\s+\w+|from\s+\w+\s+import|def\s+\w+|class\s+\w+|async\s+def)', code))
-    
-    # Clean up the code
-    code = code.strip()
-    
-    # Format Python code
-    if is_python:
-        try:
-            # Split into lines
-            lines = code.split('\n')
-            
-            # Remove empty lines at start/end while preserving internal empty lines
-            while lines and not lines[0].strip():
-                lines.pop(0)
-            while lines and not lines[-1].strip():
-                lines.pop()
-            
-            # Find common indentation
-            def get_indentation(line):
-                return len(line) - len(line.lstrip()) if line.strip() else None
-            
-            indentation_levels = [get_indentation(line) for line in lines if get_indentation(line) is not None]
-            if indentation_levels:
-                common_indent = min(indentation_levels)
-                # Remove common indentation
-                lines = [line[common_indent:] if line.strip() else '' for line in lines]
-            
-            # Join lines back together
-            code = '\n'.join(lines)
-            
-            # Add proper line breaks for readability
-            code = re.sub(r'(\s*import\s+[^;]+?;?\s*$)', r'\1\n', code, flags=re.MULTILINE)  # After imports
-            code = re.sub(r'(\s*from\s+[^;]+?import[^;]+?;?\s*$)', r'\1\n', code, flags=re.MULTILINE)  # After from imports
-            code = re.sub(r'(\s*class\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before class
-            code = re.sub(r'(\s*def\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before function
-            code = re.sub(r'(\s*async\s+def\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before async function
-            
-            # Fix indentation for multi-line strings
-            code = re.sub(r'(["\'\"]).*?\1', lambda m: m.group().replace('\n', '\n    '), code, flags=re.DOTALL)
-            
-        except Exception as e:
-            logger.warning(f"Error formatting Python code: {e}")
-    
-    # Add language hint for syntax highlighting
-    lang = "python" if is_python else ""
-    
-    return f"\n```{lang}\n{code}\n```\n"
-
-def format_text_content(content):
-    """Format text content to preserve document structure."""
-    # Split content into sections
-    sections = re.split(r'\n\s*\n+', content)
-    formatted_sections = []
-
-    for section in sections:
-        section = section.strip()
-        if not section:
-            continue
-
-        # Check if it's a code block
-        if section.startswith('`'):
-            formatted_sections.append(section)
-            continue
-
-        # Format headings (starts with capital letter, ends with colon or period)
-        if re.match(r'^[A-Z][^.!?]*(?:[.!?]|\s*:)$', section.split('\n')[0]):
-            heading = section.split('\n')[0].rstrip(':.')
-            rest = '\n'.join(section.split('\n')[1:])
-            formatted_sections.append(f"\n## {heading}\n\n{rest}")
-            continue
-
-        # Format subheadings
-        if re.match(r'^(?:Example|Advanced|Note|Option|Step)[^.!?]*(?:[.!?]|\s*:)', section.split('\n')[0]):
-            heading = section.split('\n')[0].rstrip(':.')
-            rest = '\n'.join(section.split('\n')[1:])
-            formatted_sections.append(f"\n### {heading}\n\n{rest}")
-            continue
-
-        # Format numbered lists
-        if re.match(r'^\d+\.\s', section):
-            lines = section.split('\n')
-            formatted_lines = []
-            current_indent = 0
-            for line in lines:
-                # Detect list items and their indentation
-                if re.match(r'^\d+\.\s', line):
-                    current_indent = len(line) - len(line.lstrip())
-                    formatted_lines.append(line.strip())
-                else:
-                    # Preserve indentation for sub-items
-                    indented_line = ' ' * current_indent + '- ' + line.strip()
-                    formatted_lines.append(indented_line)
-            formatted_sections.append('\n'.join(formatted_lines))
-            continue
-
-        # Format bullet points
-        if re.match(r'^[-*•]\s', section):
-            lines = section.split('\n')
-            formatted_lines = []
-            for line in lines:
-                if re.match(r'^[-*•]\s', line):
-                    formatted_lines.append(line.strip())
-                else:
-                    formatted_lines.append('  ' + line.strip())
-            formatted_sections.append('\n'.join(formatted_lines))
-            continue
-
-        # Format normal paragraphs
-        lines = section.split('\n')
-        formatted_lines = []
-        for line in lines:
-            formatted_lines.append(line.strip())
-        formatted_sections.append(' '.join(formatted_lines))
-
-    # Join sections with proper spacing
-    formatted_content = '\n\n'.join(formatted_sections)
-    
-    # Fix extra newlines around headings
-    formatted_content = re.sub(r'\n{3,}##', '\n\n##', formatted_content)
-    formatted_content = re.sub(r'\n{3,}###', '\n\n###', formatted_content)
-    
-    return formatted_content
-
-def clean_text(text):
-    """Clean text by removing special characters and normalizing whitespace"""
-    # Remove markdown links
-    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
-    
-    # Remove special characters and normalize whitespace
-    text = re.sub(r'[=\-\*•◦○●]+', '', text)  # Remove decorative characters
-    text = re.sub(r'\s+', ' ', text)  # Normalize spaces and tabs
-    text = text.strip()
-    
-    # Fix common encoding issues
-    text = text.replace('â€™', "'")
-    text = text.replace('â€"', "-")
-    text = text.replace('â€œ', '"')
-    text = text.replace('â€', '"')
-    text = text.replace('â€¢', '•')
-    
-    return text
-
-def is_navigation_text(text):
-    """Check if text appears to be navigation or boilerplate content"""
-    nav_patterns = [
-        r'home|search|blog|changelog|quick\s+start|installation|deployment',
-        r'previous|next|menu|navigation',
-        r'copyright|terms|privacy|contact'
-    ]
-    return any(re.search(pattern, text.lower()) for pattern in nav_patterns)
-
-def ensure_url_scheme(url):
-    """Ensure URL has a proper scheme"""
-    if not url.startswith(('http://', 'https://')):
-        url = 'https://' + url.lstrip('/')
-    return url
-
-def format_condensed_summary(summary):
-    """Format a condensed summary into a readable string"""
-    if not summary:
-        return "No content could be extracted"
-        
-    output = []
-    
-    # Add title
-    if summary.get("title"):
-        output.append(f"# {summary['title']}")
-        output.append("")
-    
-    # Add core message if present
-    if summary.get("core_message"):
-        output.append("## Core Message")
-        output.append(summary["core_message"])
-        output.append("")
-    
-    # Add key points if present
-    if summary.get("key_points"):
-        output.append("## Key Points")
-        for point in summary["key_points"]:
-            output.append(f"- {point}")
-        output.append("")
-    
-    # Add technical terms if present
-    if summary.get("technical_terms"):
-        output.append("## Technical Terms")
-        for term in summary["technical_terms"]:
-            output.append(f"- {term}")
-        output.append("")
-    
-    return "\n".join(output)
-
 async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STANDARD):
     """Crawl documentation pages and save structured content."""
-    os.makedirs(output_dir, exist_ok=True)
-    crawled_urls = set()
-    queue = asyncio.Queue()
     progress = CrawlProgress(page_limit)
+    rate_limiter = RateLimiter()
+    crawled_urls = set()
     
-    # Add initial URLs to queue
+    # Process URLs
     for url in urls:
-        await queue.put(ensure_url_scheme(url))
-    
-    async with AsyncWebCrawler(BROWSER_CONFIG) as crawler:
-        while not queue.empty() and not progress.limit_reached():
-            url = await queue.get()
+        if not progress.should_process_more():
+            break
             
-            if url in crawled_urls:
-                continue
-                
-            logger.info(f"Crawling {url}")
+        url = ensure_url_scheme(url)
+        if url in crawled_urls:
+            continue
+            
+        # Apply rate limiting
+        await rate_limiter.wait()
+        
+        try:
             result = await safe_crawl(url)
             
             if result and result.success:
                 # Save content
-                save_to_knowledge_base(result, output_dir)
+                if format == SummaryFormat.CONDENSED:
+                    save_unified_knowledge(result, output_dir)  # Not async
+                else:
+                    save_to_knowledge_base(result, output_dir)  # Not async
+                    
                 crawled_urls.add(url)
-                progress.increment()
+                progress.update()
                 
                 # Extract and queue new links
-                links = extract_page_links(result.html, url)
-                for link in links:
-                    if link not in crawled_urls and not progress.limit_reached():
-                        await queue.put(link)
+                if result.html:
+                    new_links = extract_page_links(result.html, url)
+                    urls.extend([link for link in new_links if link not in crawled_urls])
+                    
+                logger.info(f"✅ Successfully processed: {url}")
             else:
-                logger.error(f"Failed to crawl {url}")
-    
+                logger.warning(f"❌ Failed to process {url}: {result.error if result else 'Unknown error'}")
+                
+        except Exception as e:
+            logger.error(f"Error processing {url}: {str(e)}")
+            
+    logger.info(f"Crawled {len(crawled_urls)} pages")
     return len(crawled_urls)
 
 def get_default_config():
@@ -1032,17 +981,20 @@ def get_default_config():
         'browser_config': {
             'headless': True,
             'viewport_width': 1280,
-            'viewport_height': 900
+            'viewport_height': 900,
+            'verbose': False,
+            'ignore_https_errors': True
         },
         'crawler_config': {
-            'word_count_threshold': 3,  # Lower for documentation
+            'word_count_threshold': 3,
             'scan_full_page': True,
             'wait_until': 'networkidle',
             'excluded_tags': ['nav', 'footer', 'header', 'script'],
             'css_selector': '.md-main__inner, .md-content__inner, .md-typeset h1, .md-typeset h2, .md-typeset h3, .md-typeset pre, .md-typeset code, .md-typeset ul, .md-typeset ol, .md-typeset p',
             'process_iframes': True,
             'remove_overlay_elements': True,
-            'cache_mode': 'BYPASS'  # Fresh content for docs
+            'cache_mode': 'ENABLED',
+            'exclude_external_links': False
         }
     }
 
@@ -1108,115 +1060,6 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 
-def clean_markdown(text):
-    """Clean and format markdown text."""
-    if not text:
-        return ""
-    
-    # Remove extra newlines
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    
-    # Fix code block formatting
-    text = re.sub(r'`` ```', '```', text)
-    text = re.sub(r'``` `', '```', text)
-    
-    # Fix bold formatting
-    text = re.sub(r'\*\*\s+```', '**```', text)
-    text = re.sub(r'```\s+\*\*', '```**', text)
-    
-    # Fix list formatting
-    text = re.sub(r'(\d+)\.\s+\*\*', r'\1. **', text)
-    
-    return text.strip()
-
-def process_code(code_text):
-    """Process and format code blocks."""
-    code = code_text.strip()
-    lang = "python" if any(keyword in code for keyword in ["import", "def", "class", "async"]) else ""
-    return f"\n```{lang}\n{code}\n```\n"
-
-def process_markdown_content(content):
-    """Process markdown content with proper formatting."""
-    if not content:
-        return ""
-    
-    # Clean up markdown formatting
-    content = clean_markdown(content)
-    
-    # Fix code block formatting
-    def format_code(match):
-        return process_code(match.group(1))
-    
-    content = re.sub(r'```(.*?)```', format_code, content, flags=re.DOTALL)
-    
-    return content
-
-async def process_url(url, output_dir=None, test=False):
-    """Process a single URL."""
-    try:
-        # Extract content
-        async with AsyncWebCrawler(config=BROWSER_CONFIG) as crawler:
-            result = await crawler.arun(url=url, config=CRAWLER_CONFIG)
-            
-            if not result or not result.markdown:
-                logger.warning(f"No content extracted from {url}")
-                return None
-            
-            # Process markdown content
-            markdown_content = process_markdown_content(result.markdown)
-            
-            if output_dir:
-                # Save markdown file
-                title = sanitize_filename(result.title or "Untitled")
-                md_file = os.path.join(output_dir, f"{title}.md")
-                with open(md_file, 'w', encoding='utf-8') as f:
-                    f.write(f"# {title}\n\n{markdown_content}")
-                
-                # Save metadata
-                json_file = os.path.join(output_dir, f"{title}.json")
-                metadata = {
-                    'url': url,
-                    'title': result.title,
-                    'timestamp': result.timestamp.isoformat(),
-                    'word_count': result.word_count,
-                    'summary': result.markdown[:500],
-                    'last_modified': result.last_modified,
-                    'links': result.links
-                }
-                with open(json_file, 'w', encoding='utf-8') as f:
-                    json.dump(metadata, f, indent=2, ensure_ascii=False)
-            
-            return markdown_content if test else None
-            
-    except Exception as e:
-        logger.error(f"Error processing {url}: {e}")
-        return None
-
-def sanitize_filename(title):
-    """Create a safe filename."""
-    return "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
-
-def process_markdown(result):
-    """Process markdown result."""
-    if not result or not result.markdown:
-        return ""
-    
-    # Clean and format the markdown
-    markdown = clean_markdown(result.markdown)
-    
-    # Add metadata
-    metadata = {
-        'url': result.url,
-        'title': result.title,
-        'timestamp': result.timestamp.isoformat(),
-        'word_count': result.word_count,
-        'summary': result.summary,
-        'last_modified': result.last_modified,
-        'links': result.links
-    }
-    
-    return markdown
-
 def process_url(url, output_dir=None, test=False):
     """Process a single URL."""
     if not url:
@@ -1234,10 +1077,6 @@ def process_url(url, output_dir=None, test=False):
     # Save to knowledge base
     output_file = save_to_knowledge_base(result, output_dir)
     return output_file
-
-def sanitize_filename(title):
-    """Create a safe filename."""
-    return "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
 
 def process_markdown(result):
     """Process markdown result."""
