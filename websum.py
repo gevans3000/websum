@@ -1170,7 +1170,7 @@ async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STA
                 if format == SummaryFormat.CONDENSED:
                     save_unified_knowledge(result, output_dir)  # Not async
                 else:
-                    save_to_knowledge_base(result, output_dir)  # Not async
+                    await save_to_knowledge_base(result, output_dir)
                     
                 crawled_urls.add(url)
                 progress.update()
@@ -1297,7 +1297,7 @@ async def main():
                     logger.debug(f"HTML content length: {len(result.html)}")
                 if result.markdown:
                     logger.debug(f"Markdown content length: {len(result.markdown)}")
-                output_file = save_to_knowledge_base(result, output_dir)
+                output_file = await save_to_knowledge_base(result, output_dir)
                 logger.info(f"Content saved to {output_file}")
             else:
                 error_msg = result.error if result and hasattr(result, 'error') else "Unknown error"
@@ -1343,7 +1343,7 @@ def process_url(url, output_dir=None, test=False):
         return None
     
     # Save to knowledge base
-    output_file = save_to_knowledge_base(result, output_dir)
+    output_file = save_to_knowledge_base(result, output_dir)  # Not async
     return output_file
 
 def process_markdown(result):
