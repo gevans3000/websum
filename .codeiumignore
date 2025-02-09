@@ -1,0 +1,38 @@
+# Ignore cache and temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.log
+
+# Ignore url cache since it's just data
+url_cache.json
+
+# Ignore virtual environment
+venv/
+env/
+ENV/
+
+# Ignore IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore build and distribution files
+build/
+dist/
+*.egg-info/
+
+# Ignore test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Keep important project files unignored:
+# websum.py
+# config.yaml
+# README.md
+# requirements.txt
+# .gitignore
