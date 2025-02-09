@@ -1,7 +1,10 @@
-crawl4ai>=0.4.248
-beautifulsoup4>=4.12.0
-markdown>=3.4.0
-aiohttp>=3.8.0
-python-dateutil>=2.8.0
-pyyaml>=6.0.1
-pytest>=7.0.0  # for testing
+# Core dependencies
+crawl4ai>=0.4.248          # Web crawling and content extraction
+beautifulsoup4>=4.12.0     # HTML parsing and processing
+markdown>=3.4.0            # Markdown conversion and formatting
+aiohttp>=3.8.0            # Async HTTP client for web requests
+python-dateutil>=2.8.0    # Date/time parsing and manipulation
+pyyaml>=6.0.1             # YAML configuration file handling
+
+# Testing dependencies
+pytest>=7.0.0             # Testing framework

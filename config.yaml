@@ -1,26 +1,32 @@
-# Websum Configuration File
+# WebSum Configuration File
+# This file controls the behavior of the WebSum documentation crawler and processor.
+# Each section configures a specific aspect of the system's operation.
 
 # Output settings
+# Controls where and how results are stored
 output:
-  dir: "./output"
-  cache_file: "url_cache.json"
+  dir: "./output"              # Base directory for all output files
+  cache_file: "url_cache.json" # Tracks processed URLs to avoid duplicates
 
 # Crawling settings
+# Configures the web crawler's behavior and resource usage
 crawler:
-  max_buffer_size: 1000000  # 1MB buffer
-  chunk_size: 524288       # 512KB chunks
-  stream_mode: true
-  page_limit: null         # null for no limit
+  max_buffer_size: 1000000     # 1MB buffer for memory efficiency
+  chunk_size: 524288           # 512KB chunks for streaming large pages
+  stream_mode: true            # Enable streaming for better memory usage
+  page_limit: null             # Maximum pages to process (null = unlimited)
 
 # Content processing
+# Defines how extracted content should be processed and cleaned
 content:
-  word_count_threshold: 10
-  exclude_navigation: true
-  clean_markdown: true
-  process_code_blocks: true
+  word_count_threshold: 10     # Minimum words for a content block
+  exclude_navigation: true     # Skip navigation elements
+  clean_markdown: true         # Remove unnecessary markdown
+  process_code_blocks: true    # Format and clean code examples
 
 # Rate limiting
+# Prevents overwhelming target servers with too many requests
 rate_limit:
-  delay_seconds: 1.0
-  max_retries: 3
-  backoff_factor: 2.0
+  delay_seconds: 1.0           # Minimum delay between requests
+  max_retries: 3              # Number of retry attempts on failure
+  backoff_factor: 2.0         # Exponential backoff multiplier
