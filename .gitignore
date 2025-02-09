@@ -2,6 +2,7 @@
 output/
 scraped_data/
 crawl_output/
+test_output/
 
 # Python development artifacts
 __pycache__/
