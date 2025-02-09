@@ -6,16 +6,10 @@ A powerful Python tool for scraping and processing documentation websites, conve
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Features](#features)
+- [Project Structure](#project-structure)
+- [Configuration](#configuration)
 - [Detailed Usage Guide](#detailed-usage-guide)
-  - [Basic Usage](#basic-usage)
-  - [Single Page Mode](#single-page-mode)
-  - [Multi-Page Crawling](#multi-page-crawling)
-  - [Output Formats](#output-formats)
-  - [Cache Management](#cache-management)
-- [Configuration Options](#configuration-options)
-- [Examples](#examples)
 - [Troubleshooting](#troubleshooting)
-- [Best Practices](#best-practices)
 
 ## Installation
 
@@ -27,8 +21,7 @@ cd websum
 
 2. Install dependencies:
 ```bash
-pip install crawl4ai
-playwright install  # Required for browser automation
+pip install -r requirements.txt
 ```
 
 ## Quick Start
@@ -40,202 +33,140 @@ python websum.py https://docs.example.com/page --output-dir ./docs
 
 ## Features
 
+- **Modular Architecture**: Clean, organized code structure for better maintainability
+- **Configuration Management**: Easy-to-modify YAML configuration file
 - **Smart Web Crawling**: Automatically follows documentation links while respecting site structure
 - **Markdown Conversion**: Converts HTML content to clean, readable Markdown
 - **Code Block Formatting**: Automatically detects and formats code blocks with proper syntax highlighting
-- **Structured Output**: Organizes content into a logical directory structure
-- **Metadata Extraction**: Captures titles, categories, and other relevant metadata
 - **URL Caching**: Prevents duplicate processing of pages
 - **Rate Limiting**: Prevents overwhelming target servers
-- **Test Mode**: Single-page testing capability
+
+## Project Structure
+
+The project follows a modular structure for better organization and maintainability:
+
+```
+websum/
+├── modules/                 # Core modules directory
+│   ├── __init__.py         # Package initialization
+│   ├── utils.py            # Utility functions
+│   └── config.py           # Configuration management
+├── config.yaml             # Configuration settings
+├── requirements.txt        # Project dependencies
+├── websum.py              # Main script
+└── README.md              # Documentation
+```
+
+### Core Modules
+
+- **utils.py**: Contains utility functions for:
+  - Text cleaning and normalization
+  - Markdown processing
+  - URL handling
+  - Code block formatting
+
+- **config.py**: Manages configuration:
+  - Loading settings from YAML
+  - Providing default configurations
+  - Environment variable management
+
+## Configuration
+
+The `config.yaml` file controls various aspects of the scraper:
+
+```yaml
+# Output settings
+output:
+  dir: "./output"           # Default output directory
+  cache_file: "url_cache.json"  # URL cache location
+
+# Crawling settings
+crawler:
+  max_buffer_size: 1000000  # 1MB buffer
+  chunk_size: 524288        # 512KB chunks
+  stream_mode: true
+  page_limit: null          # null for no limit
+
+# Content processing
+content:
+  word_count_threshold: 10
+  exclude_navigation: true
+  clean_markdown: true
+  process_code_blocks: true
+
+# Rate limiting
+rate_limit:
+  delay_seconds: 1.0
+  max_retries: 3
+  backoff_factor: 2.0
+```
+
+To modify settings:
+1. Copy `config.yaml` to your desired location
+2. Edit the values as needed
+3. The script will automatically use your custom settings
 
 ## Detailed Usage Guide
 
 ### Basic Usage
 
-The simplest way to use WebSum is to provide a URL and an output directory:
-
 ```bash
-python websum.py https://docs.example.com/start --output-dir ./output
+# Scrape a single page
+python websum.py https://docs.example.com/page --test
+
+# Scrape with custom output directory
+python websum.py https://docs.example.com/page --output-dir ./my-docs
+
+# Scrape with custom config
+python websum.py https://docs.example.com/page --config my-config.yaml
 ```
 
-This will:
-1. Scrape the specified page
-2. Convert it to Markdown
-3. Save it in the output directory with proper formatting
+### Output Structure
 
-### Single Page Mode
-
-To process just one page without following any links, use the `--test` flag:
-
-```bash
-python websum.py https://docs.example.com/page --output-dir ./output --test
+The scraper creates a clean directory structure:
 ```
-
-This is useful for:
-- Testing the scraper on a single page
-- Extracting specific pages without crawling the entire site
-- Debugging extraction issues
-
-### Multi-Page Crawling
-
-By default, WebSum will crawl linked pages up to the specified limit:
-
-```bash
-# Crawl up to 10 pages
-python websum.py https://docs.example.com/start --output-dir ./output --limit 10
-
-# Crawl without limit
-python websum.py https://docs.example.com/start --output-dir ./output --limit 0
-```
-
-The crawler will:
-- Follow links that appear to be documentation pages
-- Skip navigation and boilerplate content
-- Respect rate limits to avoid overwhelming servers
-- Cache processed URLs to avoid duplicates
-
-### Output Formats
-
-#### Standard Format
-```bash
-python websum.py https://docs.example.com/page --output-dir ./output
-```
-Creates:
-- `{title}.md`: Main content in Markdown format
-- `{title}.json`: Metadata and additional information
-
-#### Condensed Format
-```bash
-python websum.py https://docs.example.com/page --output-dir ./output --format condensed
-```
-Creates a more concise output focusing on key information.
-
-### Cache Management
-
-WebSum maintains a cache of processed URLs to prevent duplicate processing:
-
-```bash
-# Clear the cache
-rm url_cache.json
-
-# Merge caches from different runs
-python websum.py --merge-cache other_cache.json
-```
-
-## Configuration Options
-
-All available command-line options:
-
-```bash
-python websum.py [URL] [OPTIONS]
-
-Options:
-  --output-dir DIR    Directory to save output files (default: ./output)
-  --test             Process single page without following links
-  --limit N          Maximum number of pages to process (0 for unlimited)
-  --format TYPE      Output format: standard or condensed
-  --cache FILE       Specify custom cache file location
-  --no-cache         Disable URL caching
-  --rate-limit N     Seconds between requests (default: 1.0)
-```
-
-## Examples
-
-### 1. Basic Documentation Scraping
-```bash
-# Scrape Python documentation
-python websum.py https://docs.python.org/3/library/asyncio.html --output-dir ./python_docs
-```
-
-### 2. Technical Documentation with Code Examples
-```bash
-# Scrape with code block formatting
-python websum.py https://docs.crawl4ai.com/core/docker-deploymeny/ --output-dir ./tech_docs
-```
-
-### 3. Multi-Page Tutorial Series
-```bash
-# Crawl entire tutorial section with limit
-python websum.py https://tutorial.example.com/start --output-dir ./tutorial --limit 20
-```
-
-### 4. API Documentation
-```bash
-# Scrape API docs with condensed format
-python websum.py https://api.example.com/docs --output-dir ./api_docs --format condensed
+output/
+├── domain.com/
+│   ├── page1.md
+│   ├── page2.md
+│   └── section/
+│       └── page3.md
+└── url_cache.json
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **NameError or ImportError**
+1. **Missing Dependencies**
    ```bash
    pip install -r requirements.txt
-   playwright install
    ```
 
-2. **Rate Limiting Errors**
-   ```bash
-   # Increase delay between requests
-   python websum.py URL --rate-limit 2.0
-   ```
+2. **Configuration Issues**
+   - Check if `config.yaml` exists in your working directory
+   - Verify YAML syntax is correct
+   - Try using default settings by renaming/removing `config.yaml`
 
-3. **Memory Issues with Large Sites**
-   ```bash
-   # Limit the number of pages
-   python websum.py URL --limit 50
-   ```
+3. **Rate Limiting**
+   - Adjust `rate_limit.delay_seconds` in `config.yaml`
+   - Increase `rate_limit.max_retries` for unstable connections
 
-### Debug Mode
-```bash
-# Enable verbose logging
-python -u websum.py URL --output-dir ./output
-```
+### Getting Help
 
-## Best Practices
+If you encounter issues:
+1. Check the error message for specific details
+2. Verify your configuration settings
+3. Try running in test mode with `--test` flag
+4. Check the logs for detailed information
 
-1. **Start Small**
-   - Use `--test` flag for initial testing
-   - Process a few pages before large crawls
-   - Check output quality before bulk processing
+## Contributing
 
-2. **Respect Servers**
-   - Use reasonable rate limits
-   - Don't crawl entire sites unnecessarily
-   - Check robots.txt compliance
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
-3. **Organize Output**
-   - Use descriptive output directories
-   - Keep separate directories for different sources
-   - Regular cache cleanup
+## License
 
-4. **Maintenance**
-   - Update dependencies regularly
-   - Clear cache periodically
-   - Monitor disk space usage
-
-## Output Structure
-
-```
-output/
-├── page_title/
-│   ├── content.md       # Main content
-│   ├── metadata.json    # Page metadata
-│   └── assets/          # Images and resources
-├── another_page/
-│   └── ...
-└── url_cache.json       # URL processing cache
-```
-
-Each processed page will have:
-- Clean, formatted Markdown content
-- Properly formatted code blocks
-- Extracted metadata
-- Preserved structure and hierarchy
-- Cached URL information
-
----
-
-For more information or to report issues, please visit the [GitHub repository](https://github.com/yourusername/websum).
+This project is licensed under the MIT License - see the LICENSE file for details.

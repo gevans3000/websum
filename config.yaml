@@ -1,0 +1,26 @@
+# Websum Configuration File
+
+# Output settings
+output:
+  dir: "./output"
+  cache_file: "url_cache.json"
+
+# Crawling settings
+crawler:
+  max_buffer_size: 1000000  # 1MB buffer
+  chunk_size: 524288       # 512KB chunks
+  stream_mode: true
+  page_limit: null         # null for no limit
+
+# Content processing
+content:
+  word_count_threshold: 10
+  exclude_navigation: true
+  clean_markdown: true
+  process_code_blocks: true
+
+# Rate limiting
+rate_limit:
+  delay_seconds: 1.0
+  max_retries: 3
+  backoff_factor: 2.0
