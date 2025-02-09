@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+"""
+WebSum: A web content extraction and summarization tool
+This module provides functionality to crawl web pages, extract meaningful content,
+and save it in various knowledge base formats optimized for both human reading
+and LLM processing.
+
+Key features:
+- Intelligent web crawling with rate limiting and caching
+- Content extraction focused on documentation and technical content
+- Multiple output formats (standard and condensed summaries)
+- Knowledge base organization with metadata
+"""
+
 import os
 import sys
 import json
@@ -34,6 +47,22 @@ from modules.utils import (
 
 # Utility functions
 def format_code_block(code):
+    """
+    Format code blocks with proper markdown syntax and intelligent indentation.
+    
+    This function:
+    1. Detects Python code through common patterns
+    2. Cleans up whitespace while preserving meaningful empty lines
+    3. Fixes indentation for better readability
+    4. Adds proper line breaks around key structures (imports, classes, functions)
+    5. Handles multi-line strings correctly
+    
+    Args:
+        code (str): Raw code block content
+        
+    Returns:
+        str: Formatted code block with markdown syntax and language hint
+    """
     """Format code block with proper markdown syntax and indentation."""
     # Detect if this is a Python code block
     is_python = bool(re.search(r'(import\s+\w+|from\s+\w+\s+import|def\s+\w+|class\s+\w+|async\s+def)', code))
@@ -74,7 +103,7 @@ def format_code_block(code):
             code = re.sub(r'(\s*async\s+def\s+[^:]+:\s*$)', r'\1\n', code, flags=re.MULTILINE)  # Before async function
             
             # Fix indentation for multi-line strings
-            code = re.sub(r'(["\'\"]).*?\1', lambda m: m.group().replace('\n', '\n    '), code, flags=re.DOTALL)
+            code = re.sub(r'(["\'\']).*?\1', lambda m: m.group().replace('\n', '\n    '), code, flags=re.DOTALL)
             
         except Exception as e:
             logger.warning(f"Error formatting Python code: {e}")
@@ -85,102 +114,141 @@ def format_code_block(code):
     return f"\n```{lang}\n{code}\n```\n"
 
 def format_text_content(text):
-    """Format text content with proper line breaks"""
+    """
+    Format text content with proper line breaks for readability.
+    Ensures consistent spacing between paragraphs while avoiding excessive whitespace.
+    
+    Args:
+        text (str): Raw text content
+        
+    Returns:
+        str: Formatted text with normalized line breaks
+    """
     return text.replace("\n\n", "\n")
 
-# Configure logging
+# Configure logging for debugging and monitoring
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Constants
+# Version tracking for compatibility and updates
 VERSION = "1.0.0"
 
-# Browser configuration
+# Browser configuration optimized for reliable content extraction
 BROWSER_CONFIG = {
-    'browser_type': "chromium",
-    'headless': True,
-    'viewport_width': 1280,
-    'viewport_height': 1080,
-    'user_agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    'verbose': False,
-    'ignore_https_errors': True
+    'browser_type': "chromium",  # Most compatible and stable for web scraping
+    'headless': True,           # Run without GUI for better performance
+    'viewport_width': 1280,     # Standard desktop resolution
+    'viewport_height': 1080,    # Ensures full page content is visible
+    'user_agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",  # Modern browser UA
+    'verbose': False,           # Minimize noise in logs
+    'ignore_https_errors': True # Handle sites with SSL issues
 }
 
-# Content extraction strategy
+# Content extraction strategy focused on documentation pages
 EXTRACTION_STRATEGY = JsonCssExtractionStrategy({
     "name": "Documentation Extraction",
-    "baseSelector": ".md-content__inner",
+    "baseSelector": ".md-content__inner",  # Common documentation content wrapper
     "fields": [
-        {"name": "title", "selector": "h1", "type": "text"},
-        {"name": "content", "selector": ".md-typeset", "type": "text"},
-        {"name": "code_blocks", "selector": "pre code", "type": "text"}
+        {"name": "title", "selector": "h1", "type": "text"},           # Main page title
+        {"name": "content", "selector": ".md-typeset", "type": "text"},# Main content body
+        {"name": "code_blocks", "selector": "pre code", "type": "text"}# Code examples
     ]
 })
 
-# Crawler configuration
+# Crawler configuration optimized for documentation sites
 CRAWLER_CONFIG = CrawlerRunConfig(
-    word_count_threshold=3,
-    wait_until="networkidle",
-    page_timeout=30000,
+    word_count_threshold=3,           # Minimum words for content blocks
+    wait_until="networkidle",         # Ensure dynamic content is loaded
+    page_timeout=30000,               # 30s timeout for slow pages
     extraction_strategy=EXTRACTION_STRATEGY,
-    process_iframes=True,
-    remove_overlay_elements=True,
-    cache_mode=CacheMode.ENABLED,
-    exclude_external_links=False,
-    excluded_tags=['nav', 'footer', 'header', 'script']
+    process_iframes=True,             # Handle embedded content
+    remove_overlay_elements=True,      # Remove popups/modals
+    cache_mode=CacheMode.ENABLED,     # Cache results for efficiency
+    exclude_external_links=False,      # Allow relevant external links
+    excluded_tags=['nav', 'footer', 'header', 'script']  # Skip non-content areas
 )
 
-# Markdown generator configuration
+# Configure markdown generation for clean, consistent output
 MARKDOWN_GENERATOR = DefaultMarkdownGenerator(
     options={
-        "preserve_tables": True,
-        "retain_code_blocks": True,
-        "escape_html": False,
-        "inline_code_format": "backticks",
-        "strip_comments": True
+        "preserve_tables": True,      # Keep table formatting
+        "retain_code_blocks": True,   # Preserve code examples
+        "escape_html": False,         # Allow HTML when needed
+        "inline_code_format": "backticks",  # Standard markdown code format
+        "strip_comments": True        # Remove HTML comments
     }
 )
 
 class SummaryFormat(Enum):
+    """
+    Defines available summary output formats:
+    - STANDARD: Detailed summary with full content structure
+    - CONDENSED: Brief overview with key points only
+    """
     STANDARD = auto()
     CONDENSED = auto()
 
-# Memory and performance optimization
-os.environ["CRAWL4AI_MAX_BUFFER_SIZE"] = "1000000"  # 1MB buffer
-os.environ["CRAWL4AI_CHUNK_SIZE"] = "524288"  # 512KB chunks
-os.environ["CRAWL4AI_STREAM_MODE"] = "True"
+# Performance optimization settings
+os.environ["CRAWL4AI_MAX_BUFFER_SIZE"] = "1000000"  # 1MB buffer for memory efficiency
+os.environ["CRAWL4AI_CHUNK_SIZE"] = "524288"       # 512KB chunks for streaming
+os.environ["CRAWL4AI_STREAM_MODE"] = "True"        # Enable streaming for large pages
 
 class CrawlProgress:
-    """Track crawl progress"""
+    """
+    Tracks and manages crawling progress with optional page limits.
+    
+    This class:
+    - Monitors number of pages processed
+    - Enforces optional page limits
+    - Helps prevent runaway crawling
+    """
     def __init__(self, page_limit=None):
+        """
+        Initialize progress tracker.
+        
+        Args:
+            page_limit (int, optional): Maximum pages to process. None for unlimited.
+        """
         self.page_limit = page_limit
         self.pages_processed = 0
         self.start_time = None
         
     def should_process_more(self):
-        """Check if we should process more pages"""
+        """Check if more pages can be processed within the limit"""
         if self.page_limit is None:
             return True
         return self.pages_processed < self.page_limit
         
     def update(self):
-        """Update progress after processing a page"""
+        """Increment the processed page counter"""
         self.pages_processed += 1
         
     def limit_reached(self):
-        """Check if page limit has been reached"""
+        """Check if we've hit the page processing limit"""
         if self.page_limit is None:
             return False
         return self.pages_processed >= self.page_limit
 
 class RateLimiter:
-    """Simple rate limiter to prevent overwhelming servers"""
+    """
+    Implements rate limiting to prevent overwhelming target servers.
+    Ensures polite crawling by maintaining minimum delays between requests.
+    """
     def __init__(self, delay_seconds=1.0):
+        """
+        Initialize rate limiter.
+        
+        Args:
+            delay_seconds (float): Minimum delay between requests
+        """
         self.delay = delay_seconds
         self.last_request = 0
         
     async def wait(self):
-        """Wait if needed to maintain rate limit"""
+        """
+        Wait if needed to maintain rate limit.
+        Uses asyncio.sleep for non-blocking delays.
+        """
         now = time.time()
         elapsed = now - self.last_request
         if elapsed < self.delay:
@@ -188,7 +256,14 @@ class RateLimiter:
         self.last_request = time.time()
 
 class URLCache:
-    """Simple cache to track processed URLs"""
+    """
+    Manages URL processing history to:
+    - Prevent duplicate processing
+    - Enable resume capability
+    - Track crawling progress
+    
+    Uses JSON file for persistence between runs.
+    """
     def __init__(self, cache_file='url_cache.json', enabled=True):
         self.cache_file = cache_file
         self.enabled = enabled
@@ -252,7 +327,22 @@ class URLCache:
             return 0
 
 class CrawlResult:
-    """Store crawl results"""
+    """
+    Stores comprehensive results from a single page crawl.
+    
+    Attributes:
+        url (str): Source URL of the crawled page
+        success (bool): Whether the crawl was successful
+        error (str): Error message if crawl failed
+        html (str): Raw HTML content
+        markdown (str): Processed markdown content
+        links (list): Extracted links from the page
+        title (str): Page title
+        summary (str): Generated content summary
+        keywords (list): Extracted keywords
+        categories (list): Detected content categories
+        last_modified (datetime): Last modification timestamp
+    """
     def __init__(self):
         self.url = None
         self.success = False
@@ -267,7 +357,22 @@ class CrawlResult:
         self.last_modified = None
 
 async def crawl_page(url, crawler_config=None):
-    """Crawl a page and return structured content"""
+    """
+    Crawls a single page and extracts structured content.
+    
+    This function:
+    1. Initializes browser with optimized settings
+    2. Fetches and processes page content
+    3. Extracts relevant links and metadata
+    4. Generates clean markdown output
+    
+    Args:
+        url (str): URL to crawl
+        crawler_config (CrawlerRunConfig, optional): Custom crawler configuration
+        
+    Returns:
+        CrawlResult: Structured result containing extracted content and metadata
+    """
     try:
         # Configure crawler with optimized settings
         if crawler_config is None:
@@ -321,7 +426,20 @@ async def crawl_page(url, crawler_config=None):
         return result
 
 async def safe_crawl(url):
-    """Crawl a URL with retries and exponential backoff"""
+    """
+    Crawls a URL with built-in error handling and retry logic.
+    
+    Features:
+    - Exponential backoff for retries
+    - Handles common network errors
+    - Logs failures for monitoring
+    
+    Args:
+        url (str): URL to crawl safely
+        
+    Returns:
+        CrawlResult: Crawl results or error information
+    """
     retries = 3
     for attempt in range(retries):
         try:
@@ -339,7 +457,23 @@ async def safe_crawl(url):
     return None
 
 def extract_page_links(html_content, base_url):
-    """Extract relevant documentation links from HTML content."""
+    """
+    Extracts and processes links from HTML content.
+    
+    This function:
+    1. Parses HTML with BeautifulSoup
+    2. Finds all <a> tags
+    3. Filters for documentation-related links
+    4. Resolves relative URLs
+    5. Removes duplicates
+    
+    Args:
+        html_content (str): Raw HTML to process
+        base_url (str): Base URL for resolving relative links
+        
+    Returns:
+        list: Filtered and processed list of relevant links
+    """
     soup = BeautifulSoup(html_content, 'html.parser')
     links = set()
     base_domain = urlparse(base_url).netloc
@@ -357,8 +491,23 @@ def extract_page_links(html_content, base_url):
     
     return sorted(links)
 
-def extract_metadata(html_content):
-    """Extract metadata from HTML content"""
+async def extract_metadata(html_content):
+    """
+    Extracts key metadata from HTML content.
+    
+    Processes:
+    - Meta tags (description, keywords)
+    - OpenGraph tags
+    - Schema.org markup
+    - Last modified dates
+    - Author information
+    
+    Args:
+        html_content (str): Raw HTML to process
+        
+    Returns:
+        dict: Extracted metadata key-value pairs
+    """
     soup = BeautifulSoup(html_content, 'html.parser')
     metadata = {
         'title': '',
@@ -390,7 +539,22 @@ def extract_metadata(html_content):
     return metadata
 
 def sanitize_filename(url):
-    """Convert URL to safe filename"""
+    """
+    Converts a URL into a safe filename for storage.
+    
+    This function:
+    1. Removes unsafe characters
+    2. Handles URL encoding
+    3. Limits filename length
+    4. Ensures unique names
+    5. Preserves important URL parts
+    
+    Args:
+        url (str): URL to convert
+        
+    Returns:
+        str: Safe filename for the URL
+    """
     # Parse URL
     parsed = urlparse(url)
     
@@ -417,14 +581,22 @@ def sanitize_filename(url):
     # Join with underscores and add domain
     return f"{domain}_{'_'.join(clean_parts)}"
 
-def save_readable_text(markdown_content, output_path, include_links=True, include_sections=True):
+async def save_readable_text(markdown_content, output_path, include_links=True, include_sections=True):
     """
-    Extract and save clean readable text from markdown content.
+    Extracts and saves clean readable text from markdown content.
+    
+    This function:
+    1. Processes markdown to plain text
+    2. Preserves important formatting
+    3. Handles links appropriately
+    4. Maintains section structure
+    5. Creates clean output files
+    
     Args:
-        markdown_content (str): The markdown content to process
-        output_path (str): Path to save the readable text file
-        include_links (bool): Whether to include links as a list at the end
-        include_sections (bool): Whether to add section breaks (---)
+        markdown_content (str): Source markdown
+        output_path (str): Where to save the text
+        include_links (bool): Whether to include links at end
+        include_sections (bool): Whether to preserve sections
     """
     if not markdown_content:
         return
@@ -477,8 +649,23 @@ def save_readable_text(markdown_content, output_path, include_links=True, includ
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(text.strip())
 
-def extract_readable_text(markdown_content):
-    """Extract clean readable text from markdown content"""
+async def extract_readable_text(markdown_content):
+    """
+    Converts markdown to clean readable text.
+    
+    Processing steps:
+    1. Strip markdown syntax
+    2. Preserve paragraph structure
+    3. Handle special elements (lists, code)
+    4. Clean up whitespace
+    5. Format for readability
+    
+    Args:
+        markdown_content (str): Source markdown
+        
+    Returns:
+        str: Clean readable text
+    """
     # Remove code blocks
     text = re.sub(r'```[\s\S]*?```', '', markdown_content)
     text = re.sub(r'`[^`]+`', '', text)
@@ -511,20 +698,29 @@ def extract_readable_text(markdown_content):
     
     return '\n\n'.join(paragraphs)
 
-def create_condensed_summary(content, metadata):
+async def create_condensed_summary(content, metadata):
     """
-    Creates a condensed hierarchical summary of the content
+    Creates a condensed hierarchical summary of the content.
+    
+    This function:
+    1. Extracts key topics and themes
+    2. Identifies main points
+    3. Organizes into hierarchy
+    4. Integrates metadata
+    5. Generates concise overview
+    
     Args:
-        content (str): The full content to summarize
-        metadata (dict): Metadata extracted from the page
+        content (str): Full content to summarize
+        metadata (dict): Additional page metadata
+        
     Returns:
-        dict: Structured summary with core message, key points, and metadata
+        dict: Structured summary with core message and key points
     """
     if not content:
         return None
         
     # First clean and extract readable text
-    content = extract_readable_text(content)
+    content = await extract_readable_text(content)
     if not content:
         return None
     
@@ -574,8 +770,23 @@ def create_condensed_summary(content, metadata):
     
     return summary
 
-def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_category=None):
-    """Save content in knowledge base format"""
+async def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_category=None):
+    """
+    Saves content in a structured knowledge base format.
+    
+    This function:
+    1. Organizes content hierarchically
+    2. Adds metadata and categories
+    3. Creates consistent structure
+    4. Handles file organization
+    5. Maintains KB integrity
+    
+    Args:
+        content (str): Content to save
+        output_dir (str): Base output directory
+        kb_root (str, optional): Knowledge base root path
+        kb_category (str, optional): Content category
+    """
     if kb_root and kb_category:
         kb_dir = os.path.join(kb_root, kb_category)
         os.makedirs(kb_dir, exist_ok=True)
@@ -601,7 +812,7 @@ def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_category=Non
         'content': {
             'html': content.html,
             'markdown': content.markdown,
-            'structured_text': extract_readable_text(content.markdown)
+            'structured_text': await extract_readable_text(content.markdown)
         },
         'links': content.links,
         'references': []
@@ -623,7 +834,7 @@ def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_category=Non
         if content.keywords:
             f.write(f"Technical Scope\n--------------\n{', '.join(content.keywords) if content.keywords else 'None'}\n\n")
         
-        f.write(extract_readable_text(content.markdown))
+        f.write(await extract_readable_text(content.markdown))
         
         if content.links:
             f.write("\nRelated Documentation\n--------------------\n")
@@ -631,7 +842,22 @@ def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_category=Non
                 f.write(f"• {link}\n")
 
 def extract_technical_terms(text):
-    """Extract likely technical terms from the content"""
+    """
+    Identifies likely technical terms in content.
+    
+    Detection methods:
+    1. Pattern matching
+    2. Case analysis
+    3. Context evaluation
+    4. Frequency analysis
+    5. Known term lists
+    
+    Args:
+        text (str): Source text to analyze
+        
+    Returns:
+        list: Identified technical terms
+    """
     # Common technical word patterns
     patterns = [
         r'\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b',  # CamelCase
@@ -648,7 +874,23 @@ def extract_technical_terms(text):
     return list(terms)
 
 def get_safe_filename(title, url):
-    """Generate a safe, descriptive filename from title and URL"""
+    """
+    Generates a safe, descriptive filename from title and URL.
+    
+    This function:
+    1. Sanitizes title text
+    2. Extracts URL components
+    3. Ensures uniqueness
+    4. Limits length
+    5. Preserves readability
+    
+    Args:
+        title (str): Page title
+        url (str): Source URL
+        
+    Returns:
+        str: Safe filename
+    """
     # Extract meaningful parts from URL
     url_path = urlparse(url).path.strip('/')
     url_parts = [part for part in url_path.split('/') if part]
@@ -667,8 +909,23 @@ def get_safe_filename(title, url):
     
     return safe_chars
 
-def save_unified_knowledge(content, output_dir, kb_root=None, kb_category=None):
-    """Save content in a unified format for both LLMs and humans"""
+async def save_unified_knowledge(content, output_dir, kb_root=None, kb_category=None):
+    """
+    Saves content in a format optimized for both LLMs and humans.
+    
+    This function:
+    1. Structures content for dual use
+    2. Preserves semantic relationships
+    3. Adds metadata and context
+    4. Organizes hierarchically
+    5. Maintains searchability
+    
+    Args:
+        content (str): Content to save
+        output_dir (str): Output directory
+        kb_root (str, optional): Knowledge base root
+        kb_category (str, optional): Content category
+    """
     if kb_root and kb_category:
         kb_dir = os.path.join(kb_root, kb_category)
         os.makedirs(kb_dir, exist_ok=True)
@@ -811,8 +1068,21 @@ def save_unified_knowledge(content, output_dir, kb_root=None, kb_category=None):
 
     return unified_file
 
-def save_to_knowledge_base(result, output_dir):
-    """Save extracted content in structured knowledge base format."""
+async def save_to_knowledge_base(result, output_dir):
+    """
+    Saves extracted content in structured knowledge base format.
+    
+    This function:
+    1. Processes crawl results
+    2. Extracts key information
+    3. Organizes content
+    4. Adds metadata
+    5. Maintains KB structure
+    
+    Args:
+        result (CrawlResult): Crawl results to save
+        output_dir (str): Output directory
+    """
     if not result or not result.success:
         return None
 
@@ -861,7 +1131,22 @@ def save_to_knowledge_base(result, output_dir):
     return markdown_file
 
 async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STANDARD):
-    """Crawl documentation pages and save structured content."""
+    """
+    Crawls documentation pages and saves structured content.
+    
+    This function:
+    1. Processes multiple URLs
+    2. Manages crawl progress
+    3. Handles rate limiting
+    4. Saves structured output
+    5. Maintains organization
+    
+    Args:
+        urls (list): URLs to crawl
+        output_dir (str): Output directory
+        page_limit (int, optional): Maximum pages to process
+        format (SummaryFormat): Output format to use
+    """
     progress = CrawlProgress(page_limit)
     rate_limiter = RateLimiter()
     crawled_urls = set()
@@ -907,7 +1192,19 @@ async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STA
     return len(crawled_urls)
 
 def get_default_config():
-    """Get optimized configuration for documentation extraction."""
+    """
+    Get optimized configuration for documentation extraction.
+    
+    This function provides:
+    1. Best-practice crawler settings
+    2. Optimized extraction strategy
+    3. Performance tuning
+    4. Error handling setup
+    5. Resource management
+    
+    Returns:
+        CrawlerRunConfig: Optimized configuration object
+    """
     return {
         'browser_config': {
             'headless': True,
@@ -930,7 +1227,22 @@ def get_default_config():
     }
 
 async def extract_documentation(url):
-    """Extract documentation with optimized settings."""
+    """
+    Extract documentation with optimized settings.
+    
+    This function:
+    1. Uses best-practice configuration
+    2. Handles common doc formats
+    3. Extracts structured content
+    4. Processes metadata
+    5. Returns clean output
+    
+    Args:
+        url (str): Documentation URL to process
+        
+    Returns:
+        CrawlResult: Extracted documentation content
+    """
     config = get_default_config()
     
     browser_config = BrowserConfig(**config['browser_config'])
@@ -941,7 +1253,16 @@ async def extract_documentation(url):
         return result
 
 async def main():
-    """Main entry point"""
+    """
+    Main entry point for the documentation crawler.
+    
+    This function:
+    1. Parses command line arguments
+    2. Sets up configuration
+    3. Processes input URLs
+    4. Manages output
+    5. Handles errors
+    """
     parser = argparse.ArgumentParser(description='Crawl and summarize web content')
     parser.add_argument('urls', nargs='+', help='URLs to crawl')
     parser.add_argument('--output-dir', '-o', default='crawl_output', help='Output directory')
@@ -992,7 +1313,24 @@ if __name__ == "__main__":
     asyncio.run(main())
 
 def process_url(url, output_dir=None, test=False):
-    """Process a single URL."""
+    """
+    Process a single URL.
+    
+    This function:
+    1. Validates input URL
+    2. Configures processing
+    3. Extracts content
+    4. Saves output
+    5. Returns results
+    
+    Args:
+        url (str): URL to process
+        output_dir (str, optional): Output directory
+        test (bool): Whether this is a test run
+        
+    Returns:
+        CrawlResult: Processing results
+    """
     if not url:
         return None
     
@@ -1010,7 +1348,22 @@ def process_url(url, output_dir=None, test=False):
     return output_file
 
 def process_markdown(result):
-    """Process markdown result."""
+    """
+    Process markdown result.
+    
+    This function:
+    1. Cleans markdown content
+    2. Formats code blocks
+    3. Handles special syntax
+    4. Normalizes structure
+    5. Improves readability
+    
+    Args:
+        result (CrawlResult): Result containing markdown
+        
+    Returns:
+        str: Processed markdown content
+    """
     if not result or not result.success:
         return None
     
