@@ -1,10 +1,12 @@
 # Core dependencies
-crawl4ai>=0.4.248          # Web crawling and content extraction
-beautifulsoup4>=4.12.0     # HTML parsing and processing
+crawl4ai>=0.4.2          # Web crawling and content extraction
+beautifulsoup4>=4.12.2     # HTML parsing and processing
 markdown>=3.4.0            # Markdown conversion and formatting
 aiohttp>=3.8.0            # Async HTTP client for web requests
 python-dateutil>=2.8.0    # Date/time parsing and manipulation
 pyyaml>=6.0.1             # YAML configuration file handling
+html2text>=2020.1.16
 
 # Testing dependencies
-pytest>=7.0.0             # Testing framework
+pytest>=7.4.3             # Testing framework
+pytest-asyncio>=0.23.2

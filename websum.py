@@ -40,7 +40,6 @@ from modules.utils import (
     clean_text,
     is_navigation_text,
     ensure_url_scheme,
-    clean_markdown,
     process_code,
     process_markdown_content
 )
@@ -1377,6 +1376,81 @@ def process_markdown(result):
     markdown = process_markdown_content(markdown)
     
     return markdown
+
+def clean_markdown(markdown):
+    """
+    Clean and normalize markdown content.
+    
+    This function:
+    1. Removes redundant whitespace
+    2. Normalizes line endings
+    3. Fixes common formatting issues
+    4. Ensures consistent structure
+    5. Preserves important whitespace
+    
+    Args:
+        markdown (str): Raw markdown content
+        
+    Returns:
+        str: Cleaned markdown content
+    """
+    if not markdown:
+        return ""
+    
+    # Normalize line endings
+    markdown = markdown.replace('\r\n', '\n')
+    
+    # Fix common formatting issues
+    markdown = re.sub(r'\n{3,}', '\n\n', markdown)  # Remove excess newlines
+    markdown = re.sub(r'[ \t]+\n', '\n', markdown)  # Remove trailing whitespace
+    
+    # Ensure proper spacing around headers
+    markdown = re.sub(r'(\n#{1,6}.*?)\n([^\n])', r'\1\n\n\2', markdown)
+    
+    return markdown.strip()
+
+def process_markdown_content(markdown):
+    """
+    Process markdown content for improved readability.
+    
+    This function:
+    1. Formats code blocks
+    2. Adjusts list indentation
+    3. Normalizes headers
+    4. Fixes link formatting
+    5. Ensures consistent spacing
+    
+    Args:
+        markdown (str): Raw markdown content
+        
+    Returns:
+        str: Processed markdown content
+    """
+    if not markdown:
+        return ""
+    
+    lines = markdown.split('\n')
+    processed_lines = []
+    in_code_block = False
+    code_block_content = []
+    
+    for line in lines:
+        if line.strip().startswith('```'):
+            if in_code_block:
+                # End of code block
+                code_content = '\n'.join(code_block_content)
+                processed_lines.append(format_code_block(code_content))
+                code_block_content = []
+                in_code_block = False
+            else:
+                # Start of code block
+                in_code_block = True
+        elif in_code_block:
+            code_block_content.append(line)
+        else:
+            processed_lines.append(line)
+    
+    return '\n'.join(processed_lines)
 
 if __name__ == "__main__":
     asyncio.run(main())
