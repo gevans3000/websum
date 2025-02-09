@@ -6,6 +6,7 @@ aiohttp>=3.8.0            # Async HTTP client for web requests
 python-dateutil>=2.8.0    # Date/time parsing and manipulation
 pyyaml>=6.0.1             # YAML configuration file handling
 html2text>=2020.1.16
+python-json-logger>=2.0.7
 
 # Testing dependencies
 pytest>=7.4.3             # Testing framework

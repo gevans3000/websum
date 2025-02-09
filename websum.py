@@ -16,6 +16,8 @@ import os
 import sys
 import json
 import logging
+import logging.config
+import datetime
 import argparse
 import asyncio
 import re
@@ -34,7 +36,6 @@ from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 from bs4 import BeautifulSoup, NavigableString
 from enum import Enum, auto
-import datetime
 import time
 from modules.utils import (
     clean_text,
@@ -43,6 +44,77 @@ from modules.utils import (
     process_code,
     process_markdown_content
 )
+
+# Configure structured logging
+logging_config = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "detailed": {
+            "format": "%(asctime)s | %(levelname)s | %(name)s | %(module)s:%(lineno)d | %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        },
+        "json": {
+            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "format": "%(asctime)s %(levelname)s %(name)s %(module)s %(lineno)d %(message)s %(exc_info)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "detailed",
+            "level": "INFO"
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": "websum.log",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 5,
+            "formatter": "json",
+            "level": "DEBUG"
+        },
+        "error_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": "websum_errors.log",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 5,
+            "formatter": "detailed",
+            "level": "ERROR"
+        }
+    },
+    "loggers": {
+        "websum": {
+            "level": "DEBUG",
+            "handlers": ["console", "file", "error_file"],
+            "propagate": False
+        }
+    }
+}
+
+# Apply logging configuration
+logging.config.dictConfig(logging_config)
+logger = logging.getLogger("websum")
+
+# Custom exception for WebSum-specific errors
+class WebSumError(Exception):
+    """Base exception class for WebSum errors"""
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details or {}
+        self.timestamp = datetime.datetime.utcnow().isoformat()
+
+class CrawlError(WebSumError):
+    """Raised when crawling fails"""
+    pass
+
+class ProcessingError(WebSumError):
+    """Raised when content processing fails"""
+    pass
+
+class StorageError(WebSumError):
+    """Raised when saving content fails"""
+    pass
 
 # Utility functions
 def format_code_block(code):
@@ -62,7 +134,6 @@ def format_code_block(code):
     Returns:
         str: Formatted code block with markdown syntax and language hint
     """
-    """Format code block with proper markdown syntax and indentation."""
     # Detect if this is a Python code block
     is_python = bool(re.search(r'(import\s+\w+|from\s+\w+\s+import|def\s+\w+|class\s+\w+|async\s+def)', code))
     
@@ -107,10 +178,7 @@ def format_code_block(code):
         except Exception as e:
             logger.warning(f"Error formatting Python code: {e}")
     
-    # Add language hint for syntax highlighting
-    lang = "python" if is_python else ""
-    
-    return f"\n```{lang}\n{code}\n```\n"
+    return code
 
 def format_text_content(text):
     """
@@ -126,7 +194,6 @@ def format_text_content(text):
     return text.replace("\n\n", "\n")
 
 # Configure logging for debugging and monitoring
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Version tracking for compatibility and updates
@@ -840,74 +907,6 @@ async def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_catego
             for link in content.links:
                 f.write(f"• {link}\n")
 
-def extract_technical_terms(text):
-    """
-    Identifies likely technical terms in content.
-    
-    Detection methods:
-    1. Pattern matching
-    2. Case analysis
-    3. Context evaluation
-    4. Frequency analysis
-    5. Known term lists
-    
-    Args:
-        text (str): Source text to analyze
-        
-    Returns:
-        list: Identified technical terms
-    """
-    # Common technical word patterns
-    patterns = [
-        r'\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b',  # CamelCase
-        r'\b[a-z]+_[a-z_]+\b',  # snake_case
-        r'`[^`]+`',  # Code in backticks
-        r'\b(?:API|REST|HTTP|JSON|XML|HTML|CSS|URL|SDK|CLI)\b',  # Common acronyms
-        r'\b(?:function|class|method|object|variable|parameter)\b'  # Programming terms
-    ]
-    
-    terms = set()
-    for pattern in patterns:
-        terms.update(re.findall(pattern, text))
-    
-    return list(terms)
-
-def get_safe_filename(title, url):
-    """
-    Generates a safe, descriptive filename from title and URL.
-    
-    This function:
-    1. Sanitizes title text
-    2. Extracts URL components
-    3. Ensures uniqueness
-    4. Limits length
-    5. Preserves readability
-    
-    Args:
-        title (str): Page title
-        url (str): Source URL
-        
-    Returns:
-        str: Safe filename
-    """
-    # Extract meaningful parts from URL
-    url_path = urlparse(url).path.strip('/')
-    url_parts = [part for part in url_path.split('/') if part]
-    
-    # Clean the title
-    if not title:
-        title = url_parts[-1] if url_parts else "untitled"
-    
-    # Remove version numbers and common words
-    title = re.sub(r'\s*[-–—]\s*(?:v\d+\.\d+\.\d+\w*|Documentation|\(.*?\))', '', title)
-    title = re.sub(r'\s+', '_', title.strip())
-    
-    # Create safe filename
-    safe_chars = re.sub(r'[^a-zA-Z0-9_-]', '', title.lower())
-    safe_chars = re.sub(r'_+', '_', safe_chars)
-    
-    return safe_chars
-
 async def save_unified_knowledge(content, output_dir, kb_root=None, kb_category=None):
     """
     Saves content in a format optimized for both LLMs and humans.
@@ -1081,53 +1080,128 @@ async def save_to_knowledge_base(result, output_dir):
     Args:
         result (CrawlResult): Crawl results to save
         output_dir (str): Output directory
+        
+    Returns:
+        str: Path to saved markdown file
+        
+    Raises:
+        StorageError: If saving content fails
+        ProcessingError: If content processing fails
     """
-    if not result or not result.success:
-        return None
+    try:
+        if not result or not result.success:
+            raise ProcessingError("Invalid or failed crawl result", {
+                "success": result.success if result else None,
+                "error": result.error if result and hasattr(result, "error") else None
+            })
 
-    # Parse HTML with BeautifulSoup
-    soup = BeautifulSoup(result.html, "html.parser")
+        # Parse HTML with BeautifulSoup
+        try:
+            soup = BeautifulSoup(result.html, "html.parser")
+        except Exception as e:
+            raise ProcessingError("Failed to parse HTML content", {
+                "error": str(e),
+                "html_length": len(result.html) if result.html else 0
+            })
 
-    # Extract Title
-    title = soup.find("title").text.strip() if soup.find("title") else "Untitled"
-    title = re.sub(r'\s*-\s*Crawl4AI Documentation.*$', '', title)  # Clean up title
+        # Extract Title with detailed logging
+        title = "Untitled"
+        try:
+            if soup.find("title"):
+                title = soup.find("title").text.strip()
+                title = re.sub(r'\s*-\s*Crawl4AI Documentation.*$', '', title)
+                logger.debug("Extracted title", extra={"title": title, "url": result.url})
+        except Exception as e:
+            logger.warning("Failed to extract title", extra={
+                "error": str(e),
+                "url": result.url,
+                "fallback_title": title
+            })
 
-    # Extract metadata
-    metadata = {
-        "url": result.url,
-        "title": title,
-        "timestamp": datetime.datetime.now().isoformat(),
-        "word_count": len(result.markdown.split()),
-        "summary": result.markdown[:500],  # First 500 chars
-        "last_modified": soup.find("meta", attrs={"name": "last-modified"})["content"] if soup.find("meta", attrs={"name": "last-modified"}) else None,
-        "links": extract_page_links(result.html, result.url)
-    }
+        # Extract metadata with error handling
+        try:
+            metadata = {
+                "url": result.url,
+                "title": title,
+                "timestamp": datetime.datetime.now().isoformat(),
+                "word_count": len(result.markdown.split()) if result.markdown else 0,
+                "summary": result.markdown[:500] if result.markdown else "",
+                "last_modified": None,
+                "links": []
+            }
+            
+            # Try to get last modified date
+            last_modified_meta = soup.find("meta", attrs={"name": "last-modified"})
+            if last_modified_meta and last_modified_meta.get("content"):
+                metadata["last_modified"] = last_modified_meta["content"]
+            
+            # Try to extract links
+            try:
+                metadata["links"] = extract_page_links(result.html, result.url)
+            except Exception as e:
+                logger.warning("Failed to extract links", extra={"error": str(e), "url": result.url})
+                
+            logger.debug("Extracted metadata", extra={"metadata": metadata})
+            
+        except Exception as e:
+            raise ProcessingError("Failed to extract metadata", {
+                "error": str(e),
+                "url": result.url
+            })
 
-    # Create safe filename
-    safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
+        # Create safe filename
+        safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
+        
+        # Process markdown content
+        try:
+            markdown_content = result.markdown
+            markdown_content = re.sub(r'`([^`]+)`', lambda m: format_code_block(m.group(1)), markdown_content)
+            markdown_content = format_text_content(markdown_content)
+        except Exception as e:
+            raise ProcessingError("Failed to process markdown content", {
+                "error": str(e),
+                "markdown_length": len(result.markdown) if result.markdown else 0
+            })
 
-    # Process markdown content
-    markdown_content = result.markdown
-
-    # Fix code block formatting
-    markdown_content = re.sub(r'`([^`]+)`', lambda m: format_code_block(m.group(1)), markdown_content)
-
-    # Fix text formatting
-    markdown_content = format_text_content(markdown_content)
-
-    # Save extracted Markdown
-    markdown_file = os.path.join(output_dir, safe_title + ".md")
-    with open(markdown_file, "w", encoding="utf-8") as f:
-        f.write(f"# {title}\n\n")
-        f.write(markdown_content)
-
-    # Save metadata as JSON
-    json_file = os.path.join(output_dir, safe_title + ".json")
-    with open(json_file, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
-
-    logger.info(f"📄 Saved: {markdown_file}, 📊 Metadata: {json_file}")
-    return markdown_file
+        # Save files with proper error handling
+        try:
+            # Ensure output directory exists
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Save markdown
+            markdown_file = os.path.join(output_dir, safe_title + ".md")
+            with open(markdown_file, "w", encoding="utf-8") as f:
+                f.write(f"# {title}\n\n")
+                f.write(markdown_content)
+            
+            # Save metadata
+            json_file = os.path.join(output_dir, safe_title + ".json")
+            with open(json_file, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+                
+            logger.info("Successfully saved content", extra={
+                "markdown_file": markdown_file,
+                "json_file": json_file,
+                "title": title,
+                "url": result.url
+            })
+            
+            return markdown_file
+            
+        except Exception as e:
+            raise StorageError("Failed to save files", {
+                "error": str(e),
+                "output_dir": output_dir,
+                "safe_title": safe_title
+            })
+            
+    except (ProcessingError, StorageError):
+        raise
+    except Exception as e:
+        raise WebSumError("Unexpected error in save_to_knowledge_base", {
+            "error": str(e),
+            "url": result.url if result else None
+        })
 
 async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STANDARD):
     """
@@ -1362,20 +1436,28 @@ def process_markdown(result):
         
     Returns:
         str: Processed markdown content
+        
+    Raises:
+        ProcessingError: If result is invalid or processing fails
     """
-    if not result or not result.success:
-        return None
+    if not result:
+        raise ProcessingError("Invalid or failed crawl result")
+    
+    if not result.success:
+        raise ProcessingError("Failed crawl result", {"error": result.error})
     
     # Process markdown
     markdown = result.markdown
     if not markdown:
-        return None
+        raise ProcessingError("No markdown content in result")
     
     # Clean and format
-    markdown = clean_markdown(markdown)
-    markdown = process_markdown_content(markdown)
-    
-    return markdown
+    try:
+        markdown = clean_markdown(markdown)
+        markdown = process_markdown_content(markdown)
+        return markdown
+    except Exception as e:
+        raise ProcessingError("Failed to process markdown", {"error": str(e)})
 
 def clean_markdown(markdown):
     """
@@ -1439,7 +1521,10 @@ def process_markdown_content(markdown):
             if in_code_block:
                 # End of code block
                 code_content = '\n'.join(code_block_content)
-                processed_lines.append(format_code_block(code_content))
+                formatted_code = format_code_block(code_content)
+                processed_lines.append('```python')  # Always use python for code blocks
+                processed_lines.extend(formatted_code.split('\n'))
+                processed_lines.append('```')
                 code_block_content = []
                 in_code_block = False
             else:
@@ -1448,7 +1533,18 @@ def process_markdown_content(markdown):
         elif in_code_block:
             code_block_content.append(line)
         else:
+            # Process non-code content
+            line = re.sub(r'^(\s*[-*+]\s+)', r'* ', line)  # Normalize list markers
+            line = re.sub(r'^(\s*\d+\.\s+)', r'1. ', line)  # Normalize numbered lists
             processed_lines.append(line)
+    
+    # Handle unclosed code block
+    if in_code_block and code_block_content:
+        code_content = '\n'.join(code_block_content)
+        formatted_code = format_code_block(code_content)
+        processed_lines.append('```python')
+        processed_lines.extend(formatted_code.split('\n'))
+        processed_lines.append('```')
     
     return '\n'.join(processed_lines)
 
