@@ -89,6 +89,13 @@ python websum.py https://docs.example.com/page1 https://docs.example.com/page2 \
   - Extensive error handling and logging
   - Comprehensive test suite
 
+- **Optional Features**:
+  - Media export (screenshots and PDFs)
+  - Content filtering and cleaning
+  - URL caching for faster reruns
+  - Debug mode with enhanced logging
+  - Resume support for interrupted crawls
+
 ## Project Structure
 
 The project follows a modular structure for better organization and maintainability:
@@ -214,22 +221,87 @@ rate_limit:
    python websum.py https://docs.example.com/page --output-dir ./custom_docs
    ```
 
-### Advanced Options
+### Output Format Options
 
-1. **Format Control**:
-   ```bash
-   python websum.py https://docs.example.com/page --format condensed
-   ```
+Choose between standard or condensed output:
+```bash
+# Standard format (default) - detailed output with metadata
+python websum.py URL --format standard
 
-2. **Page Limits**:
-   ```bash
-   python websum.py https://docs.example.com/page --page-limit 5
-   ```
+# Condensed format - markdown only, no metadata
+python websum.py URL --format condensed
+```
 
-3. **Cache Control**:
-   ```bash
-   python websum.py https://docs.example.com/page --no-cache
-   ```
+### Optional Features
+
+1. **Media Export**
+```bash
+# Export PDF along with markdown
+python websum.py URL --media pdf
+
+# Capture screenshots of pages
+python websum.py URL --media screenshots
+
+# Export both PDF and screenshots
+python websum.py URL --media all
+```
+
+2. **Content Filtering**
+```bash
+# Set minimum word count for content blocks
+python websum.py URL --filter "min_words=20"
+
+# Exclude specific HTML tags
+python websum.py URL --filter "exclude_tags=nav,footer"
+
+# Combine multiple filters
+python websum.py URL --filter "min_words=20,exclude_tags=nav,footer"
+```
+
+3. **Caching**
+```bash
+# Enable caching for faster reruns
+python websum.py URL --cache enable
+
+# Clear existing cache
+python websum.py URL --cache clear
+
+# Set custom cache location
+python websum.py URL --cache enable --cache-dir ./custom_cache
+```
+
+4. **Debug Mode**
+```bash
+# Enable detailed logging
+python websum.py URL --debug
+
+# Specify log file location
+python websum.py URL --debug --log-file ./debug.log
+```
+
+5. **Resume Support**
+```bash
+# Enable auto-save of progress
+python websum.py URL --resume enable
+
+# Resume from last saved state
+python websum.py URL --resume continue
+
+# Clear saved state and start fresh
+python websum.py URL --resume clear
+```
+
+### Combining Options
+
+You can combine multiple options:
+```bash
+python websum.py URL \
+  --format condensed \
+  --media pdf \
+  --filter "min_words=20,exclude_tags=nav" \
+  --cache enable \
+  --resume enable
+```
 
 ## Contributing
 
