@@ -7,24 +7,42 @@ A powerful Python tool for scraping and processing documentation websites, conve
 - [Quick Start](#quick-start)
 - [Features](#features)
 - [Project Structure](#project-structure)
+- [Development Guide](#development-guide)
 - [Configuration](#configuration)
 - [Detailed Usage Guide](#detailed-usage-guide)
+- [Contributing](#contributing)
 - [Troubleshooting](#troubleshooting)
 
 ## Installation
 
-1. Clone the repository:
+1. Ensure you have Python 3.8+ installed. You can check your version:
 ```bash
-git clone https://github.com/yourusername/websum.git
+python --version
+```
+
+2. Clone the repository:
+```bash
+git clone https://github.com/gevans3000/websum.git
 cd websum
 ```
 
-2. Install dependencies:
+3. Create a virtual environment (recommended):
+```bash
+# Windows
+python -m venv venv
+.\venv\Scripts\activate
+
+# Linux/Mac
+python -m venv venv
+source venv/bin/activate
+```
+
+4. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Install browser requirements (one-time setup):
+5. Install browser requirements (one-time setup):
 ```bash
 python -m playwright install chromium
 ```
@@ -55,7 +73,7 @@ python websum.py https://docs.example.com/page1 https://docs.example.com/page2 \
 - **Content Processing**:
   - Converts HTML to clean, semantic Markdown
   - Preserves document structure and hierarchy
-  - Handles code blocks with language detection
+  - Intelligent code block formatting with language detection
   - Maintains tables and lists formatting
   - Extracts metadata and categories
 
@@ -68,8 +86,8 @@ python websum.py https://docs.example.com/page1 https://docs.example.com/page2 \
 - **Developer Friendly**:
   - Clear, documented code structure
   - Configurable via YAML
-  - Extensive error handling
-  - Detailed logging
+  - Extensive error handling and logging
+  - Comprehensive test suite
 
 ## Project Structure
 
@@ -77,31 +95,74 @@ The project follows a modular structure for better organization and maintainabil
 
 ```
 websum/
-├── modules/                 # Core functionality modules
-│   ├── __init__.py         # Package initialization
-│   ├── utils.py            # Utility functions for text and URL processing
-│   └── config.py           # Configuration management and validation
-├── config.yaml             # Main configuration file
-├── requirements.txt        # Python package dependencies
-├── websum.py              # Main entry point and crawler logic
-└── README.md              # Project documentation
+├── tests/                  # Test suite
+│   ├── unit/              # Unit tests for individual components
+│   ├── conftest.py        # Pytest configuration and fixtures
+│   └── README.md          # Testing documentation
+├── config.yaml            # Main configuration file
+├── requirements.txt       # Python package dependencies
+├── websum.py             # Main entry point and core logic
+└── README.md             # Project documentation
 ```
 
-### Core Modules
+### Key Components
 
-- **utils.py**: Contains utility functions for:
-  - Text cleaning and normalization
+- **websum.py**: Core functionality including:
+  - URL crawling and content extraction
   - Markdown processing and formatting
-  - URL handling and validation
+  - Error handling and logging
   - Code block language detection
-  - Content extraction helpers
+  - Content cleaning and normalization
 
-- **config.py**: Manages configuration:
-  - YAML configuration loading
-  - Environment variable integration
-  - Default settings management
-  - Configuration validation
-  - Dynamic updates
+- **tests/**: Comprehensive test suite:
+  - Unit tests for core functions
+  - Integration tests for end-to-end flows
+  - Test fixtures and utilities
+  - Testing documentation
+
+## Development Guide
+
+### Setting Up Development Environment
+
+1. Fork and clone the repository
+2. Create a virtual environment and install dependencies
+3. Install development dependencies:
+```bash
+pip install -r requirements-dev.txt  # Includes testing packages
+```
+
+### Running Tests
+
+Run the full test suite:
+```bash
+python -m pytest
+```
+
+Run specific test files:
+```bash
+python -m pytest tests/unit/test_markdown.py
+```
+
+Run with coverage:
+```bash
+python -m pytest --cov=websum tests/
+```
+
+### Code Style
+
+- Follow PEP 8 guidelines
+- Use meaningful variable names
+- Add docstrings for functions and classes
+- Keep functions focused and modular
+- Add comments for complex logic
+
+### Making Changes
+
+1. Create a new branch for your changes
+2. Write tests for new functionality
+3. Ensure all tests pass
+4. Update documentation as needed
+5. Submit a pull request
 
 ## Configuration
 
@@ -170,6 +231,27 @@ rate_limit:
    python websum.py https://docs.example.com/page --no-cache
    ```
 
+## Contributing
+
+We welcome contributions! Here's how you can help:
+
+1. **Report Issues**
+   - Use the GitHub issue tracker
+   - Include detailed steps to reproduce
+   - Attach relevant logs and configuration
+
+2. **Submit Pull Requests**
+   - Fork the repository
+   - Create a feature branch
+   - Add tests for new functionality
+   - Update documentation
+   - Submit a pull request
+
+3. **Improve Documentation**
+   - Fix typos or unclear instructions
+   - Add examples and use cases
+   - Update API documentation
+
 ## Troubleshooting
 
 ### Common Issues
@@ -177,14 +259,22 @@ rate_limit:
 1. **Browser Installation**:
    - Error: "Browser not found"
    - Solution: Run `python -m playwright install chromium`
+   - Note: May need admin privileges on some systems
 
 2. **Memory Usage**:
    - Issue: High memory consumption
    - Solution: Adjust `max_buffer_size` in config.yaml
+   - Tip: Start with smaller values and increase as needed
 
 3. **Rate Limiting**:
    - Issue: Server blocking requests
    - Solution: Increase `delay_seconds` in config.yaml
+   - Tip: Check the site's robots.txt for guidance
+
+4. **Test Failures**:
+   - Issue: Pytest errors or failures
+   - Solution: Ensure all dependencies are installed
+   - Tip: Check Python version compatibility
 
 ### Getting Help
 
@@ -192,3 +282,17 @@ rate_limit:
 - Review the configuration guide above
 - Ensure all dependencies are installed correctly
 - Check the logs for detailed error messages
+- Join our community discussions
+
+### Debug Mode
+
+Enable debug logging for more detailed output:
+```bash
+python websum.py https://docs.example.com/page --debug
+```
+
+This will show:
+- Detailed error messages
+- Request/response information
+- Processing steps
+- Memory usage statistics

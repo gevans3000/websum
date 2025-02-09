@@ -102,7 +102,7 @@ class WebSumError(Exception):
     def __init__(self, message, details=None):
         super().__init__(message)
         self.details = details or {}
-        self.timestamp = datetime.datetime.utcnow().isoformat()
+        self.timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 class CrawlError(WebSumError):
     """Raised when crawling fails"""
@@ -862,7 +862,7 @@ async def save_knowledge_base_entry(content, output_dir, kb_root=None, kb_catego
     # Create knowledge base structure with enhanced metadata
     kb_entry = {
         'url': content.url,
-        'timestamp': datetime.datetime.now().isoformat(),
+        'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'title': content.title,
         'categories': content.categories,
         'summary': content.summary,
@@ -1066,7 +1066,7 @@ async def save_unified_knowledge(content, output_dir, kb_root=None, kb_category=
 
     return unified_file
 
-async def save_to_knowledge_base(result, output_dir):
+async def save_to_knowledge_base(result, output_dir, format=SummaryFormat.STANDARD):
     """
     Saves extracted content in structured knowledge base format.
     
@@ -1080,6 +1080,7 @@ async def save_to_knowledge_base(result, output_dir):
     Args:
         result (CrawlResult): Crawl results to save
         output_dir (str): Output directory
+        format (SummaryFormat): Output format to use
         
     Returns:
         str: Path to saved markdown file
@@ -1091,116 +1092,52 @@ async def save_to_knowledge_base(result, output_dir):
     try:
         if not result or not result.success:
             raise ProcessingError("Invalid or failed crawl result", {
-                "success": result.success if result else None,
-                "error": result.error if result and hasattr(result, "error") else None
+                "url": result.url if result else None,
+                "error": result.error if result else None
             })
-
-        # Parse HTML with BeautifulSoup
-        try:
-            soup = BeautifulSoup(result.html, "html.parser")
-        except Exception as e:
-            raise ProcessingError("Failed to parse HTML content", {
-                "error": str(e),
-                "html_length": len(result.html) if result.html else 0
-            })
-
-        # Extract Title with detailed logging
-        title = "Untitled"
-        try:
-            if soup.find("title"):
-                title = soup.find("title").text.strip()
-                title = re.sub(r'\s*-\s*Crawl4AI Documentation.*$', '', title)
-                logger.debug("Extracted title", extra={"title": title, "url": result.url})
-        except Exception as e:
-            logger.warning("Failed to extract title", extra={
-                "error": str(e),
-                "url": result.url,
-                "fallback_title": title
-            })
-
-        # Extract metadata with error handling
-        try:
+            
+        # Create output directory
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate base filename from URL
+        base_name = sanitize_filename(result.url)
+        
+        # Save markdown file
+        md_path = os.path.join(output_dir, f"{base_name}.md")
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write(result.markdown)
+            
+        # Only save metadata as JSON for standard format
+        if format == SummaryFormat.STANDARD:
+            # Extract title from HTML if available
+            title = "Untitled"
+            try:
+                soup = BeautifulSoup(result.html, "html.parser")
+                if soup.find("title"):
+                    title = soup.find("title").text.strip()
+            except:
+                pass
+                
             metadata = {
                 "url": result.url,
                 "title": title,
-                "timestamp": datetime.datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "word_count": len(result.markdown.split()) if result.markdown else 0,
-                "summary": result.markdown[:500] if result.markdown else "",
-                "last_modified": None,
-                "links": []
+                "summary": result.summary if hasattr(result, "summary") else None,
+                "last_modified": result.last_modified.isoformat() if hasattr(result, "last_modified") and result.last_modified else None
             }
             
-            # Try to get last modified date
-            last_modified_meta = soup.find("meta", attrs={"name": "last-modified"})
-            if last_modified_meta and last_modified_meta.get("content"):
-                metadata["last_modified"] = last_modified_meta["content"]
+            json_path = os.path.join(output_dir, f"{base_name}.json")
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
             
-            # Try to extract links
-            try:
-                metadata["links"] = extract_page_links(result.html, result.url)
-            except Exception as e:
-                logger.warning("Failed to extract links", extra={"error": str(e), "url": result.url})
-                
-            logger.debug("Extracted metadata", extra={"metadata": metadata})
+        return md_path
             
-        except Exception as e:
-            raise ProcessingError("Failed to extract metadata", {
-                "error": str(e),
-                "url": result.url
-            })
-
-        # Create safe filename
-        safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:50]
-        
-        # Process markdown content
-        try:
-            markdown_content = result.markdown
-            markdown_content = re.sub(r'`([^`]+)`', lambda m: format_code_block(m.group(1)), markdown_content)
-            markdown_content = format_text_content(markdown_content)
-        except Exception as e:
-            raise ProcessingError("Failed to process markdown content", {
-                "error": str(e),
-                "markdown_length": len(result.markdown) if result.markdown else 0
-            })
-
-        # Save files with proper error handling
-        try:
-            # Ensure output directory exists
-            os.makedirs(output_dir, exist_ok=True)
-            
-            # Save markdown
-            markdown_file = os.path.join(output_dir, safe_title + ".md")
-            with open(markdown_file, "w", encoding="utf-8") as f:
-                f.write(f"# {title}\n\n")
-                f.write(markdown_content)
-            
-            # Save metadata
-            json_file = os.path.join(output_dir, safe_title + ".json")
-            with open(json_file, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, indent=2)
-                
-            logger.info("Successfully saved content", extra={
-                "markdown_file": markdown_file,
-                "json_file": json_file,
-                "title": title,
-                "url": result.url
-            })
-            
-            return markdown_file
-            
-        except Exception as e:
-            raise StorageError("Failed to save files", {
-                "error": str(e),
-                "output_dir": output_dir,
-                "safe_title": safe_title
-            })
-            
-    except (ProcessingError, StorageError):
-        raise
     except Exception as e:
-        raise WebSumError("Unexpected error in save_to_knowledge_base", {
-            "error": str(e),
-            "url": result.url if result else None
+        raise StorageError(f"Failed to save content: {str(e)}", {
+            "url": result.url if result else None,
+            "output_dir": output_dir,
+            "error": str(e)
         })
 
 async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STANDARD):
@@ -1244,7 +1181,7 @@ async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STA
                 if format == SummaryFormat.CONDENSED:
                     save_unified_knowledge(result, output_dir)  # Not async
                 else:
-                    await save_to_knowledge_base(result, output_dir)
+                    await save_to_knowledge_base(result, output_dir, format)
                     
                 crawled_urls.add(url)
                 progress.update()
