@@ -45,50 +45,30 @@ from modules.utils import (
     process_markdown_content
 )
 from playwright.async_api import async_playwright
+from tqdm import tqdm
 
 # Configure structured logging
 logging_config = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "detailed": {
-            "format": "%(asctime)s | %(levelname)s | %(name)s | %(module)s:%(lineno)d | %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S"
+    'version': 1,
+    'disable_existing_loggers': True,  # Disable other loggers to prevent interference
+    'formatters': {
+        'standard': {
+            'format': '\r%(message)s\n',  # Use carriage return to clear progress bar line
         },
-        "json": {
-            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-            "format": "%(asctime)s %(levelname)s %(name)s %(module)s %(lineno)d %(message)s %(exc_info)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S"
-        }
     },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "detailed",
-            "level": "INFO"
+    'handlers': {
+        'default': {
+            'level': 'INFO',
+            'formatter': 'standard',
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
         },
-        "file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": "websum.log",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 5,
-            "formatter": "json",
-            "level": "DEBUG"
-        },
-        "error_file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": "websum_errors.log",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 5,
-            "formatter": "detailed",
-            "level": "ERROR"
-        }
     },
-    "loggers": {
-        "websum": {
-            "level": "DEBUG",
-            "handlers": ["console", "file", "error_file"],
-            "propagate": False
+    'loggers': {
+        '': {
+            'handlers': ['default'],
+            'level': 'INFO',
+            'propagate': True
         }
     }
 }
@@ -1177,7 +1157,7 @@ async def save_to_knowledge_base(result, kb_root=None, format=SummaryFormat.STAN
             "error": str(e)
         })
 
-async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STANDARD):
+async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STANDARD, media_options=None):
     """
     Crawls documentation pages and saves structured content.
     
@@ -1193,85 +1173,70 @@ async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STA
         output_dir (str): Output directory
         page_limit (int, optional): Maximum pages to process
         format (SummaryFormat): Output format to use
+        media_options (list, optional): Media to capture (screenshots, pdf, or all)
     """
-    progress = CrawlProgress(page_limit)
-    rate_limiter = RateLimiter()
-    crawled_urls = set()
-    
-    # Process URLs
-    for url in urls:
-        if not progress.should_process_more():
-            break
-            
-        url = ensure_url_scheme(url)
-        if url in crawled_urls:
-            continue
-            
-        # Apply rate limiting
-        await rate_limiter.wait()
+    try:
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
         
-        try:
-            result = await safe_crawl(url)
+        # Create media directory if needed
+        if media_options:
+            media_dir = os.path.join(output_dir, "media")
+            os.makedirs(media_dir, exist_ok=True)
+        else:
+            media_dir = None
+        
+        # Configure crawler
+        crawler_config = CRAWLER_CONFIG
+        if media_options:
+            crawler_config.media_options = media_options
+        
+        # Initialize progress bar with more details
+        total_urls = len(urls)
+        with tqdm(total=total_urls, 
+                 desc="Processing pages", 
+                 unit="page",
+                 bar_format="\r{desc} |{bar:50}| {percentage:3.0f}% • {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+                 ncols=120,
+                 position=0,
+                 leave=True,
+                 dynamic_ncols=True,
+                 ascii=True) as pbar:  # Use ASCII for better compatibility
             
-            if result and result.success:
-                # Save content
-                if format == SummaryFormat.CONDENSED:
-                    save_unified_knowledge(result, output_dir)  # Not async
-                else:
-                    await save_to_knowledge_base(result, output_dir, format)
-                    
-                crawled_urls.add(url)
-                progress.update()
+            for url in urls:
+                # Update description with current URL (shortened)
+                url_short = os.path.basename(url)[:20]
+                pbar.set_description(f"Processing {url_short:<20}")
+                pbar.refresh()  # Force refresh of progress bar
                 
-                # Extract and queue new links
-                if result.html:
-                    new_links = extract_page_links(result.html, url)
-                    urls.extend([link for link in new_links if link not in crawled_urls])
+                try:
+                    # Crawl the page
+                    result = await crawl_page(url, crawler_config, media_dir)
                     
-                logger.info(f"✅ Successfully processed: {url}")
-            else:
-                logger.warning(f"❌ Failed to process {url}: {result.error if result else 'Unknown error'}")
+                    if result.success:
+                        # Save to knowledge base
+                        await save_to_knowledge_base(result, output_dir, format)
+                        pbar.set_postfix_str("✓ Done")
+                        logger.info(f"Successfully processed {url}")
+                    else:
+                        pbar.set_postfix_str("✗ Failed")
+                        logger.error(f"Failed to process {url}: {result.error}")
+                    
+                except Exception as e:
+                    pbar.set_postfix_str("! Error")
+                    logger.error(f"Error processing {url}: {str(e)}")
+                    continue
                 
-        except Exception as e:
-            logger.error(f"Error processing {url}: {str(e)}")
-            
-    logger.info(f"Crawled {len(crawled_urls)} pages")
-    return len(crawled_urls)
-
-def get_default_config():
-    """
-    Get optimized configuration for documentation extraction.
-    
-    This function provides:
-    1. Best-practice crawler settings
-    2. Optimized extraction strategy
-    3. Performance tuning
-    4. Error handling setup
-    5. Resource management
-    
-    Returns:
-        CrawlerRunConfig: Optimized configuration object
-    """
-    return {
-        'browser_config': {
-            'headless': True,
-            'viewport_width': 1280,
-            'viewport_height': 900,
-            'verbose': False,
-            'ignore_https_errors': True
-        },
-        'crawler_config': {
-            'word_count_threshold': 3,
-            'scan_full_page': True,
-            'wait_until': 'networkidle',
-            'excluded_tags': ['nav', 'footer', 'header', 'script'],
-            'css_selector': '.md-main__inner, .md-content__inner, .md-typeset h1, .md-typeset h2, .md-typeset h3, .md-typeset pre, .md-typeset code, .md-typeset ul, .md-typeset ol, .md-typeset p',
-            'process_iframes': True,
-            'remove_overlay_elements': True,
-            'cache_mode': 'ENABLED',
-            'exclude_external_links': False
-        }
-    }
+                # Update progress
+                pbar.update(1)
+                pbar.refresh()  # Force refresh after update
+                
+            # Clear progress bar on completion
+            pbar.clear()
+                
+    except Exception as e:
+        logger.error(f"Error in crawl_docs: {str(e)}")
+        raise
 
 async def extract_documentation(url):
     """
@@ -1364,7 +1329,7 @@ async def main():
             await save_to_knowledge_base(result, output_dir, SummaryFormat[args.format.upper()])
         else:
             # Normal mode - process all URLs
-            await crawl_docs(args.urls, output_dir, args.page_limit, SummaryFormat[args.format.upper()])
+            await crawl_docs(args.urls, output_dir, args.page_limit, SummaryFormat[args.format.upper()], args.media)
             
     except Exception as e:
         logger.error(f"Error: {str(e)}")
