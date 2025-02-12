@@ -8,6 +8,9 @@ pyyaml>=6.0.1             # YAML configuration file handling
 html2text>=2020.1.16
 python-json-logger>=2.0.7
 tqdm>=4.66.1              # Progress bar functionality
+streamlit>=1.30.0
+fastapi>=0.109.0
+uvicorn>=0.27.0
 
 # Testing dependencies
 pytest>=7.4.3             # Testing framework

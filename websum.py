@@ -44,6 +44,7 @@ from modules.utils import (
     process_code,
     process_markdown_content
 )
+from modules.config import get_default_config
 from playwright.async_api import async_playwright
 from tqdm import tqdm
 
@@ -182,13 +183,11 @@ VERSION = "1.0.0"
 
 # Browser configuration optimized for reliable content extraction
 BROWSER_CONFIG = {
-    'browser_type': "chromium",  # Most compatible and stable for web scraping
-    'headless': True,           # Run without GUI for better performance
-    'viewport_width': 1280,     # Standard desktop resolution
-    'viewport_height': 1080,    # Ensures full page content is visible
-    'user_agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",  # Modern browser UA
-    'verbose': False,           # Minimize noise in logs
-    'ignore_https_errors': True # Handle sites with SSL issues
+    'browser_type': "chromium",    # Most compatible and stable for web scraping
+    'headless': True,             # Run without GUI for better performance
+    'viewport_width': 1920,       # Standard desktop resolution
+    'viewport_height': 1080,      # Ensures full page content is visible
+    'user_agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"  # Modern browser UA
 }
 
 # Content extraction strategy focused on documentation pages
@@ -1091,71 +1090,27 @@ async def save_to_knowledge_base(result, kb_root=None, format=SummaryFormat.STAN
         StorageError: If saving content fails
         ProcessingError: If content processing fails
     """
+    if not kb_root:
+        kb_root = os.path.join(os.getcwd(), "output")
+    os.makedirs(kb_root, exist_ok=True)
+    
     try:
-        if not result or not result.success:
-            raise ProcessingError("Invalid or failed crawl result", {
-                "url": result.url if result else None,
-                "error": result.error if result else None
-            })
-            
-        # Create output directory
-        if kb_root:
-            os.makedirs(kb_root, exist_ok=True)
+        # Process markdown content
+        content = process_markdown(result)
+        if not content:
+            raise ProcessingError("Failed to process markdown content")
         
-        # Generate base filename from URL
-        base_name = sanitize_filename(result.url)
+        # Create output filename
+        filename = sanitize_filename(result.url)
+        output_file = os.path.join(kb_root, f"{filename}.md")
         
-        # Save markdown file
-        md_path = os.path.join(kb_root, f"{base_name}.md")
-        with open(md_path, 'w', encoding='utf-8') as f:
-            f.write(result.markdown)
-            
-            # Add media references if they exist
-            if hasattr(result, 'screenshot_path') or hasattr(result, 'pdf_path'):
-                f.write("\n\n## 📎 Media Files\n\n")
-                if hasattr(result, 'screenshot_path'):
-                    rel_path = os.path.relpath(result.screenshot_path, kb_root)
-                    f.write(f"- [📸 Screenshot]({rel_path})\n")
-                if hasattr(result, 'pdf_path'):
-                    rel_path = os.path.relpath(result.pdf_path, kb_root)
-                    f.write(f"- [📄 PDF Version]({rel_path})\n")
-            
-        # Only save metadata as JSON for standard format
-        if format == SummaryFormat.STANDARD:
-            # Extract title from HTML if available
-            title = "Untitled"
-            try:
-                soup = BeautifulSoup(result.html, "html.parser")
-                if soup.find("title"):
-                    title = soup.find("title").text.strip()
-            except:
-                pass
-                
-            metadata = {
-                "url": result.url,
-                "title": title,
-                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "word_count": len(result.markdown.split()) if result.markdown else 0,
-                "summary": result.summary if hasattr(result, "summary") else None,
-                "last_modified": result.last_modified.isoformat() if hasattr(result, "last_modified") and result.last_modified else None,
-                "media": {
-                    "screenshot": result.screenshot_path if hasattr(result, "screenshot_path") else None,
-                    "pdf": result.pdf_path if hasattr(result, "pdf_path") else None
-                }
-            }
-            
-            json_path = os.path.join(kb_root, f"{base_name}.json")
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-            
-        return md_path
-            
+        # Save content
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return output_file
     except Exception as e:
-        raise StorageError(f"Failed to save content: {str(e)}", {
-            "url": result.url if result else None,
-            "kb_root": kb_root,
-            "error": str(e)
-        })
+        raise StorageError(f"Failed to save content: {str(e)}")
 
 async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STANDARD, media_options=None):
     """
@@ -1238,7 +1193,7 @@ async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STA
         logger.error(f"Error in crawl_docs: {str(e)}")
         raise
 
-async def extract_documentation(url):
+async def extract_documentation(url, media_options=None):
     """
     Extract documentation with optimized settings.
     
@@ -1251,18 +1206,60 @@ async def extract_documentation(url):
     
     Args:
         url (str): Documentation URL to process
+        media_options (list, optional): Media to capture (screenshots, pdf, or all)
         
     Returns:
         CrawlResult: Extracted documentation content
     """
-    config = get_default_config()
-    
-    browser_config = BrowserConfig(**config['browser_config'])
-    crawler_config = CrawlerRunConfig(**config['crawler_config'])
-    
-    async with AsyncWebCrawler(browser_config) as crawler:
-        result = await crawler.arun(url=url, config=crawler_config)
+    async with AsyncWebCrawler() as crawler:
+        config = CrawlerRunConfig(
+            verbose=True,
+            cache_mode=CacheMode.ENABLED,
+            wait_until="networkidle",
+            word_count_threshold=200,
+            screenshot=media_options and ('screenshots' in media_options or 'all' in media_options),
+            pdf=media_options and ('pdf' in media_options or 'all' in media_options)
+        )
+        result = await crawler.arun(url=url, config=config)
         return result
+
+async def process_url(url, kb_root=None, test=False, media_options=None):
+    """
+    Process a single URL.
+    
+    This function:
+    1. Validates input URL
+    2. Configures processing
+    3. Extracts content
+    4. Saves output
+    5. Returns results
+    
+    Args:
+        url (str): URL to process
+        kb_root (str, optional): Knowledge base root path
+        test (bool): Whether this is a test run
+        media_options (list, optional): Media to capture (screenshots, pdf, or all)
+        
+    Returns:
+        CrawlResult: Processing results
+    """
+    if not url:
+        return None
+    
+    if not kb_root:
+        kb_root = os.path.join(os.getcwd(), "output")
+    os.makedirs(kb_root, exist_ok=True)
+    
+    # Extract content
+    result = await extract_documentation(url, media_options)
+    if not result or not result.success:
+        return None
+    
+    # Save to knowledge base
+    if not test:
+        output_file = await save_to_knowledge_base(result, kb_root)  # Update to await
+        return output_file
+    return result
 
 async def main():
     """
@@ -1322,11 +1319,10 @@ async def main():
         
         if args.test:
             # Test mode - single page
-            result = await crawl_page(args.urls[0], config, media_dir)
-            if not result.success:
-                logger.error(f"Failed to process {args.urls[0]}: {result.error}")
+            result = await process_url(args.urls[0], output_dir, test=True, media_options=args.media)
+            if not result:
+                logger.error(f"Failed to process {args.urls[0]}")
                 sys.exit(1)
-            await save_to_knowledge_base(result, output_dir, SummaryFormat[args.format.upper()])
         else:
             # Normal mode - process all URLs
             await crawl_docs(args.urls, output_dir, args.page_limit, SummaryFormat[args.format.upper()], args.media)
@@ -1337,41 +1333,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-def process_url(url, kb_root=None, test=False):
-    """
-    Process a single URL.
-    
-    This function:
-    1. Validates input URL
-    2. Configures processing
-    3. Extracts content
-    4. Saves output
-    5. Returns results
-    
-    Args:
-        url (str): URL to process
-        kb_root (str, optional): Knowledge base root path
-        test (bool): Whether this is a test run
-        
-    Returns:
-        CrawlResult: Processing results
-    """
-    if not url:
-        return None
-    
-    if not kb_root:
-        kb_root = os.path.join(os.getcwd(), "output")
-    os.makedirs(kb_root, exist_ok=True)
-    
-    # Extract content
-    result = extract_documentation(url)
-    if not result or not result.success:
-        return None
-    
-    # Save to knowledge base
-    output_file = save_to_knowledge_base(result, kb_root)  # Not async
-    return output_file
 
 def process_markdown(result):
     """
