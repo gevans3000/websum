@@ -48,6 +48,59 @@ from modules.config import get_default_config
 from playwright.async_api import async_playwright
 from tqdm import tqdm
 
+# Global state
+_processing_urls = set()
+_crawler = None
+
+async def get_crawler():
+    """Get or create the singleton crawler instance."""
+    global _crawler
+    if _crawler is None:
+        _crawler = AsyncWebCrawler()
+        await _crawler.__aenter__()
+    return _crawler
+
+async def cleanup_crawler():
+    """Clean up the crawler instance."""
+    global _crawler
+    if _crawler:
+        await _crawler.__aexit__(None, None, None)
+        _crawler = None
+
+def get_output_filename(url, ext='.md'):
+    """Get sanitized output filename for a URL."""
+    return sanitize_filename(url) + ext
+
+async def extract_documentation(url, media_options=None):
+    """
+    Extract documentation with optimized settings.
+    
+    This function:
+    1. Uses best-practice configuration
+    2. Handles common doc formats
+    3. Extracts structured content
+    4. Processes metadata
+    5. Returns clean output
+    
+    Args:
+        url (str): Documentation URL to process
+        media_options (list, optional): Media to capture (screenshots, pdf, or all)
+        
+    Returns:
+        CrawlResult: Extracted documentation content
+    """
+    crawler = await get_crawler()
+    config = CrawlerRunConfig(
+        verbose=True,
+        cache_mode=CacheMode.ENABLED,
+        wait_until="networkidle",
+        word_count_threshold=200,
+        screenshot=media_options and ('screenshots' in media_options or 'all' in media_options),
+        pdf=media_options and ('pdf' in media_options or 'all' in media_options)
+    )
+    result = await crawler.arun(url=url, config=config)
+    return result
+
 # Configure structured logging
 logging_config = {
     'version': 1,
@@ -333,7 +386,7 @@ class URLCache:
         """Add URL to cache with timestamp"""
         if self.enabled:
             self.cache[url] = {
-                'timestamp': datetime.datetime.now().isoformat(),
+                'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 'count': self.cache.get(url, {}).get('count', 0) + 1
             }
             self._save_cache()
@@ -1095,18 +1148,13 @@ async def save_to_knowledge_base(result, kb_root=None, format=SummaryFormat.STAN
     os.makedirs(kb_root, exist_ok=True)
     
     try:
-        # Process markdown content
-        content = process_markdown(result)
-        if not content:
-            raise ProcessingError("Failed to process markdown content")
-        
         # Create output filename
         filename = sanitize_filename(result.url)
         output_file = os.path.join(kb_root, f"{filename}.md")
         
         # Save content
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(content)
+            f.write(result.markdown)
         
         return output_file
     except Exception as e:
@@ -1193,73 +1241,58 @@ async def crawl_docs(urls, output_dir, page_limit=None, format=SummaryFormat.STA
         logger.error(f"Error in crawl_docs: {str(e)}")
         raise
 
-async def extract_documentation(url, media_options=None):
-    """
-    Extract documentation with optimized settings.
-    
-    This function:
-    1. Uses best-practice configuration
-    2. Handles common doc formats
-    3. Extracts structured content
-    4. Processes metadata
-    5. Returns clean output
-    
-    Args:
-        url (str): Documentation URL to process
-        media_options (list, optional): Media to capture (screenshots, pdf, or all)
-        
-    Returns:
-        CrawlResult: Extracted documentation content
-    """
-    async with AsyncWebCrawler() as crawler:
-        config = CrawlerRunConfig(
-            verbose=True,
-            cache_mode=CacheMode.ENABLED,
-            wait_until="networkidle",
-            word_count_threshold=200,
-            screenshot=media_options and ('screenshots' in media_options or 'all' in media_options),
-            pdf=media_options and ('pdf' in media_options or 'all' in media_options)
-        )
-        result = await crawler.arun(url=url, config=config)
-        return result
-
 async def process_url(url, kb_root=None, test=False, media_options=None):
     """
-    Process a single URL.
+    Process a single URL, extracting documentation and saving to knowledge base.
     
     This function:
     1. Validates input URL
     2. Configures processing
     3. Extracts content
     4. Saves output
-    5. Returns results
+    5. Returns result
     
     Args:
         url (str): URL to process
-        kb_root (str, optional): Knowledge base root path
-        test (bool): Whether this is a test run
+        kb_root (str, optional): Knowledge base root directory
+        test (bool, optional): Test mode - don't save files
         media_options (list, optional): Media to capture (screenshots, pdf, or all)
         
     Returns:
-        CrawlResult: Processing results
+        CrawlResult: Result of crawling and processing
     """
+    global _processing_urls
+    
     if not url:
         return None
-    
-    if not kb_root:
-        kb_root = os.path.join(os.getcwd(), "output")
-    os.makedirs(kb_root, exist_ok=True)
-    
-    # Extract content
-    result = await extract_documentation(url, media_options)
-    if not result or not result.success:
+        
+    # Check if URL is already being processed
+    if url in _processing_urls:
+        logger.debug(f"URL {url} is already being processed, skipping")
         return None
-    
-    # Save to knowledge base
-    if not test:
-        output_file = await save_to_knowledge_base(result, kb_root)  # Update to await
-        return output_file
-    return result
+        
+    try:
+        _processing_urls.add(url)
+        result = await extract_documentation(url, media_options)
+        
+        if not result or not result.success:
+            logger.error(f"Failed to extract content from {url}")
+            return None
+        
+        # Process markdown content
+        result.markdown = process_markdown(result)
+        
+        if test:
+            return result
+            
+        if kb_root:
+            output_file = await save_to_knowledge_base(result, kb_root)
+            return output_file
+            
+        return result
+        
+    finally:
+        _processing_urls.remove(url)
 
 async def main():
     """
@@ -1296,171 +1329,151 @@ async def main():
         os.makedirs(output_dir, exist_ok=True)
         
         # Create media directory if needed
-        media_dir = None
         if args.media:
             media_dir = os.path.join(output_dir, 'media')
             os.makedirs(media_dir, exist_ok=True)
-        
-        # Configure crawler
-        config = CrawlerRunConfig(
-            verbose=args.debug,
-            cache_mode=CacheMode.ENABLED,
-            wait_until="networkidle",
-            page_timeout=30000
-        )
-        
-        # Configure media options
-        if args.media:
-            config.media_options = set()
-            if args.media in ['screenshots', 'all']:
-                config.media_options.add('screenshot')
-            if args.media in ['pdf', 'all']:
-                config.media_options.add('pdf')
+        else:
+            media_dir = None
         
         if args.test:
-            # Test mode - single page
-            result = await process_url(args.urls[0], output_dir, test=True, media_options=args.media)
-            if not result:
-                logger.error(f"Failed to process {args.urls[0]}")
-                sys.exit(1)
-        else:
-            # Normal mode - process all URLs
-            await crawl_docs(args.urls, output_dir, args.page_limit, SummaryFormat[args.format.upper()], args.media)
+            # Test mode - process all URLs but don't save
+            results = []
+            for url in args.urls:
+                result = await process_url(url, test=True, media_options=args.media)
+                if not result:
+                    logger.error(f"Failed to process {url}")
+                    continue
+                results.append(result)
             
-    except Exception as e:
-        logger.error(f"Error: {str(e)}")
+            if not results:
+                logger.error("No URLs were successfully processed")
+                sys.exit(1)
+                
+            # Show test mode preview
+            print("\n")
+            print("╔═══════════════════════════════════════════════════════════════════════════════════╗")
+            print("║                              TEST MODE - Preview Only                              ║")
+            print("║                         No files will be saved to disk                            ║")
+            print("╚═══════════════════════════════════════════════════════════════════════════════════╝")
+            
+            for result in results:
+                print(f"\n📄 URL: {result.url}")
+                print("\n📂 Files that would be created:")
+                print(f"├─ 📄 Content: {os.path.join(output_dir, get_output_filename(result.url))}")
+                if args.media:
+                    print(f"├─ 📸 Screenshot: {os.path.join(output_dir, 'media', get_output_filename(result.url, '.png'))}")
+                
+                print("\n📝 Content Preview:")
+                print("┌───────────────────────────────────────────────────────────────────────────────┐")
+                preview_lines = result.markdown.split('\n')[:5]  # Show first 5 lines
+                for line in preview_lines:
+                    if len(line) > 80:
+                        line = line[:77] + "..."
+                    print(f"│ {line:<79} │")
+                print("└───────────────────────────────────────────────────────────────────────────────┘")
+                print("\n" + "─" * 81 + "\n")  # Separator between URLs
+        else:
+            # Normal mode - crawl and save
+            await crawl_docs(
+                args.urls,
+                output_dir,
+                page_limit=args.page_limit,
+                format=SummaryFormat.CONDENSED if args.format == 'condensed' else SummaryFormat.STANDARD,
+                media_options=args.media
+            )
+            
+    except KeyboardInterrupt:
+        logger.info("Crawling interrupted by user")
         sys.exit(1)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    except Exception as e:
+        logger.error(f"Error during crawling: {str(e)}")
+        if args.debug:
+            logger.exception(e)
+        sys.exit(1)
+    finally:
+        await cleanup_crawler()
 
 def process_markdown(result):
     """
     Process markdown result.
     
     This function:
-    1. Cleans markdown content
+    1. Cleans markdown
     2. Formats code blocks
-    3. Handles special syntax
-    4. Normalizes structure
-    5. Improves readability
+    3. Handles special cases
+    4. Returns processed text
     
     Args:
-        result (CrawlResult): Result containing markdown
+        result (CrawlResult): Result to process
         
     Returns:
-        str: Processed markdown content
-        
-    Raises:
-        ProcessingError: If result is invalid or processing fails
+        str: Processed markdown text
     """
-    if not result:
-        raise ProcessingError("Invalid or failed crawl result")
-    
-    if not result.success:
-        raise ProcessingError("Failed crawl result", {"error": result.error})
-    
-    # Process markdown
-    markdown = result.markdown
-    if not markdown:
-        raise ProcessingError("No markdown content in result")
-    
-    # Clean and format
-    try:
-        markdown = clean_markdown(markdown)
-        markdown = process_markdown_content(markdown)
-        return markdown
-    except Exception as e:
-        raise ProcessingError("Failed to process markdown", {"error": str(e)})
-
-def clean_markdown(markdown):
-    """
-    Clean and normalize markdown content.
-    
-    This function:
-    1. Removes redundant whitespace
-    2. Normalizes line endings
-    3. Fixes common formatting issues
-    4. Ensures consistent structure
-    5. Preserves important whitespace
-    
-    Args:
-        markdown (str): Raw markdown content
-        
-    Returns:
-        str: Cleaned markdown content
-    """
-    if not markdown:
+    if not result or not result.markdown:
         return ""
     
-    # Normalize line endings
-    markdown = markdown.replace('\r\n', '\n')
-    
-    # Fix common formatting issues
-    markdown = re.sub(r'\n{3,}', '\n\n', markdown)  # Remove excess newlines
-    markdown = re.sub(r'[ \t]+\n', '\n', markdown)  # Remove trailing whitespace
-    
-    # Ensure proper spacing around headers
-    markdown = re.sub(r'(\n#{1,6}.*?)\n([^\n])', r'\1\n\n\2', markdown)
-    
-    return markdown.strip()
-
-def process_markdown_content(markdown):
-    """
-    Process markdown content for improved readability.
-    
-    This function:
-    1. Formats code blocks
-    2. Adjusts list indentation
-    3. Normalizes headers
-    4. Fixes link formatting
-    5. Ensures consistent spacing
-    
-    Args:
-        markdown (str): Raw markdown content
-        
-    Returns:
-        str: Processed markdown content
-    """
-    if not markdown:
-        return ""
-    
-    lines = markdown.split('\n')
+    # Split into lines for processing
+    lines = result.markdown.split('\n')
     processed_lines = []
+    
+    # Track state
     in_code_block = False
-    code_block_content = []
+    code_block_lang = None
+    code_block_lines = []
     
     for line in lines:
-        if line.strip().startswith('```'):
-            if in_code_block:
-                # End of code block
-                code_content = '\n'.join(code_block_content)
-                formatted_code = format_code_block(code_content)
-                processed_lines.append('```python')  # Always use python for code blocks
-                processed_lines.extend(formatted_code.split('\n'))
-                processed_lines.append('```')
-                code_block_content = []
-                in_code_block = False
-            else:
+        # Handle code blocks
+        if line.startswith('```'):
+            if not in_code_block:
                 # Start of code block
                 in_code_block = True
-        elif in_code_block:
-            code_block_content.append(line)
-        else:
-            # Process non-code content
-            line = re.sub(r'^(\s*[-*+]\s+)', r'* ', line)  # Normalize list markers
-            line = re.sub(r'^(\s*\d+\.\s+)', r'1. ', line)  # Normalize numbered lists
-            processed_lines.append(line)
+                code_block_lang = line[3:].strip() or 'text'
+                code_block_lines = []
+            else:
+                # End of code block
+                in_code_block = False
+                if code_block_lines:
+                    # Add formatted code block
+                    processed_lines.append(f'```{code_block_lang}')
+                    processed_lines.extend(code_block_lines)
+                    processed_lines.append('```')
+                code_block_lines = []
+                continue
+        
+        if in_code_block:
+            # Collect code block lines
+            code_block_lines.append(line)
+            continue
+        
+        # Process non-code lines
+        processed_lines.append(line)
     
     # Handle unclosed code block
-    if in_code_block and code_block_content:
-        code_content = '\n'.join(code_block_content)
-        formatted_code = format_code_block(code_content)
-        processed_lines.append('```python')
-        processed_lines.extend(formatted_code.split('\n'))
+    if in_code_block and code_block_lines:
+        processed_lines.append(f'```{code_block_lang}')
+        processed_lines.extend(code_block_lines)
         processed_lines.append('```')
     
-    return '\n'.join(processed_lines)
+    # Join lines and clean up spacing
+    markdown = '\n'.join(processed_lines)
+    
+    # Clean up multiple blank lines
+    markdown = re.sub(r'\n{3,}', '\n\n', markdown)
+    
+    # Handle headings
+    markdown = re.sub(r'^(#+)(\s*)(.+)$', lambda m: f"{m.group(1)} {m.group(3)}", markdown, flags=re.MULTILINE)
+    
+    # Handle lists
+    markdown = re.sub(r'^\s*[-*+]\s+(.+)$', lambda m: f"- {m.group(1)}", markdown, flags=re.MULTILINE)
+    
+    # Handle links
+    markdown = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', lambda m: f"[{m.group(1).strip()}]({m.group(2).strip()})", markdown)
+    
+    # Handle emphasis
+    markdown = re.sub(r'(\*\*|__)(.*?)\1', r'**\2**', markdown)  # Bold
+    markdown = re.sub(r'(\*|_)(.*?)\1', r'*\2*', markdown)  # Italic
+    
+    return markdown
 
 if __name__ == "__main__":
     asyncio.run(main())

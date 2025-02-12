@@ -1,187 +1,122 @@
-# WebSum - Web Documentation Summarizer
+# WebSum
 
-A powerful tool for crawling, summarizing, and organizing web documentation with support for screenshots and PDFs.
+A powerful web content extraction and summarization tool that crawls documentation pages and saves them in a structured knowledge base format.
 
 ## Features
 
-### Working Features
-- Web page crawling and content extraction
-- Markdown conversion and formatting
-- Full-page screenshot capture
-- PDF generation
-- Link extraction and processing
-- Structured output organization
+- **Smart Web Crawling**: Uses Crawl4AI for efficient and accurate content extraction
+- **Markdown Processing**: Advanced markdown formatting with proper code block handling, list formatting, and link cleanup
+- **Media Support**: Captures screenshots and PDFs of documentation pages
+- **Test Mode**: Preview extracted content without saving to verify processing
+- **Duplicate Prevention**: Built-in protection against double crawling of URLs
+- **Structured Output**: Organizes content in a knowledge base format optimized for both humans and LLMs
 
-### In Progress
-- Advanced content summarization
-- Multi-page crawling optimization
-- Enhanced metadata extraction
+## Installation
 
-## Quick Start
+```bash
+pip install -r requirements.txt
+```
 
-### Prerequisites
-1. Install Python 3.8 or higher
-2. Install required packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Install Playwright browsers:
-   ```bash
-   playwright install
-   ```
+## Usage
 
 ### Basic Usage
 
-1. **Simple Page Capture**
-   ```bash
-   python websum.py https://example.com
-   ```
-
-2. **Capture with Screenshots**
-   ```bash
-   python websum.py https://example.com --media screenshots
-   ```
-
-3. **Generate PDF**
-   ```bash
-   python websum.py https://example.com --media pdf
-   ```
-
-4. **Capture Both Screenshot and PDF**
-   ```bash
-   python websum.py https://example.com --media all
-   ```
-
-### Advanced Options
-
-- **Output Directory**: Change where files are saved
-  ```bash
-  python websum.py https://example.com -o custom_output
-  ```
-
-- **Page Limit**: Set maximum pages to crawl
-  ```bash
-  python websum.py https://example.com --page-limit 5
-  ```
-
-- **Debug Mode**: Enable detailed logging
-  ```bash
-  python websum.py https://example.com --debug
-  ```
-
-- **Test Mode**: Process single page only
-  ```bash
-  python websum.py https://example.com --test
-  ```
-
-## Output Structure
-
+```bash
+python websum.py URL [URL...] --output path/to/output
 ```
-crawl_output/
-├── media/                    # Screenshots and PDFs
-│   ├── example.com.png      # Screenshot
-│   └── example.com.pdf      # PDF version
-├── example.com.md           # Markdown content
-└── metadata.json            # Page metadata
+
+### Test Mode
+
+Preview content extraction without saving files:
+
+```bash
+python websum.py URL --test
+```
+
+### Media Options
+
+Capture screenshots or PDFs:
+
+```bash
+python websum.py URL --media screenshots  # Capture screenshots
+python websum.py URL --media pdf          # Generate PDFs
+python websum.py URL --media all          # Both screenshots and PDFs
+```
+
+### Output Format Options
+
+```bash
+python websum.py URL --format standard    # Detailed output with full structure
+python websum.py URL --format condensed   # Brief overview with key points
+```
+
+### Debug Mode
+
+Enable detailed logging:
+
+```bash
+python websum.py URL --debug
 ```
 
 ## Configuration
 
-### Media Options
-- `screenshots`: Captures full-page screenshots
-- `pdf`: Generates PDF documents
-- `all`: Both screenshots and PDFs
+The tool uses environment variables for performance optimization:
 
-### Output Formats
-- `standard` (default): Detailed output with headers and sections
-- `condensed`: Minimal output focusing on key content
+- `CRAWL4AI_MAX_BUFFER_SIZE`: 1MB buffer for memory efficiency
+- `CRAWL4AI_CHUNK_SIZE`: 512KB chunks for streaming
+- `CRAWL4AI_STREAM_MODE`: Enabled by default for large pages
 
-## Tips for Best Results
+## Output Structure
 
-1. **Media Capture**
-   - Ensure enough disk space for screenshots/PDFs
-   - Wait for page load completion (--debug shows progress)
-   - Screenshots capture the full page by default
+### Knowledge Base Format
 
-2. **Performance**
-   - Use `--test` for initial testing
-   - Enable `--debug` to monitor progress
-   - Start with single pages before batch processing
-
-3. **Common Issues**
-   - If screenshots are empty, check page load time
-   - For PDF issues, ensure page is fully loaded
-   - Use debug mode to identify crawling problems
-
-## Development Guide
-
-### Project Structure
+Files are saved with the following structure:
 ```
-websum/
-├── websum.py               # Main application
-├── modules/               # Core modules
-│   ├── config.py         # Configuration handling
-│   └── utils.py          # Utility functions
-├── tests/                # Test suite
-└── config.yaml           # Default configuration
+output/
+  ├── domain.com/
+  │   ├── page-title.md           # Main content
+  │   ├── page-title.png          # Screenshot (if enabled)
+  │   └── page-title.pdf          # PDF (if enabled)
+  └── metadata.json               # Crawl metadata
 ```
 
-### Adding New Features
-1. Follow existing code structure in `websum.py`
-2. Add configuration in `config.yaml` if needed
-3. Include utility functions in `modules/utils.py`
-4. Add tests in `tests/` directory
+### Markdown Processing
 
-### Testing
-```bash
-pytest tests/
-```
+The tool handles various markdown elements:
+- Code blocks with language detection
+- Headers with proper spacing
+- Ordered and unordered lists
+- Links with clean formatting
+- Bold and italic text
+- Images with alt text
 
-### Debug Mode
-Enable verbose logging with `--debug` flag:
-```bash
-python websum.py https://example.com --debug
-```
+## Error Handling
+
+- Automatic retry for failed requests
+- Rate limiting to prevent server overload
+- Memory usage monitoring
+- Detailed error logging in debug mode
+
+## Dependencies
+
+- Python 3.7+
+- Crawl4AI 0.4.248+
+- Playwright for browser automation
+- BeautifulSoup4 for HTML processing
+- Other dependencies listed in requirements.txt
+
+## Known Limitations
+
+- JavaScript-heavy pages may require additional wait time
+- Some dynamic content may not be captured
+- PDF generation may vary based on page layout
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Add your changes
-4. Write/update tests
-5. Submit a pull request
-
-### Current Focus Areas
-- Content summarization improvements
-- Multi-page crawling optimization
-- Enhanced error handling
-- Additional media capture options
-
-## Known Limitations
-
-1. **Media Capture**
-   - Large pages may take longer to capture
-   - Some dynamic content might not render
-   - Memory usage increases with page size
-
-2. **Crawling**
-   - Rate limiting on some sites
-   - JavaScript-heavy pages may need extra time
-   - Some sites block automated access
-
-3. **Output**
-   - Large files in media directory
-   - PDF formatting may vary by page
+3. Submit a pull request
 
 ## License
 
-MIT License - See LICENSE file for details
-
-## Acknowledgments
-
-- Built with [Crawl4AI](https://github.com/unclecode/crawl4ai)
-- Uses [Playwright](https://playwright.dev/) for media capture
-- Inspired by documentation management needs
-
----
-For bug reports and feature requests, please open an issue on GitHub.
+MIT License - see LICENSE file for details
