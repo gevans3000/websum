@@ -14,12 +14,14 @@ crawler:
   max_buffer_size: 1000000     # 1MB buffer for memory efficiency
   chunk_size: 524288           # 512KB chunks for streaming large pages
   stream_mode: true            # Enable streaming for better memory usage
-  page_limit: null             # Maximum pages to process (null = unlimited)
+  page_limit: 50              # Maximum pages to process (null = unlimited)
+  max_concurrent: 1           # Maximum concurrent page downloads
+  timeout_seconds: 60         # Page load timeout in seconds
 
 # Content processing
 # Defines how extracted content should be processed and cleaned
 content:
-  word_count_threshold: 10     # Minimum words for a content block
+  word_count_threshold: 50     # Minimum words for a content block
   exclude_navigation: true     # Skip navigation elements
   clean_markdown: true         # Remove unnecessary markdown
   process_code_blocks: true    # Format and clean code examples
@@ -27,6 +29,61 @@ content:
 # Rate limiting
 # Prevents overwhelming target servers with too many requests
 rate_limit:
-  delay_seconds: 1.0           # Minimum delay between requests
+  delay_seconds: 2.0          # Minimum delay between requests
   max_retries: 3              # Number of retry attempts on failure
   backoff_factor: 2.0         # Exponential backoff multiplier
+  per_domain_delay: 3.0       # Minimum delay between requests to same domain
+  max_requests_per_minute: 20 # Maximum requests per minute
+  cool_down_period: 30        # Seconds to wait if rate limit is hit
+
+# Media and file settings
+# Controls what additional content is downloaded
+media:
+  download_images: true       # Download images referenced in content
+  download_pdfs: true        # Download linked PDF files
+  download_code: true        # Download source code files
+  download_docs: true        # Download documentation files (md, rst, txt)
+  save_screenshots: false    # Take screenshots of pages
+  file_types:               # File extensions to download
+    images:
+      - .png
+      - .jpg
+      - .jpeg
+      - .gif
+      - .svg
+      - .webp
+    documents:
+      - .pdf
+      - .doc
+      - .docx
+      - .txt
+      - .md
+      - .rst
+    code:
+      - .py
+      - .js
+      - .java
+      - .cpp
+      - .h
+      - .c
+      - .cs
+      - .go
+      - .rs
+      - .php
+      - .rb
+  max_file_size: 10485760   # Maximum file size to download (10MB)
+  output_structure:         # How to organize downloaded files
+    images: "images/"       # Images go in images/ subdirectory
+    documents: "docs/"      # Documents go in docs/ subdirectory
+    code: "code/"          # Code files go in code/ subdirectory
+  download_options:
+    verify_ssl: true       # Verify SSL certificates
+    timeout: 30           # Download timeout in seconds
+    max_retries: 3        # Number of download retries
+    skip_existing: true   # Skip if file exists locally
+
+# Error handling
+error_handling:
+  wait_on_error: 10           # Seconds to wait after an error before retrying
+  max_consecutive_errors: 5   # Stop after this many consecutive errors
+  respect_robots_txt: true    # Follow robots.txt rules

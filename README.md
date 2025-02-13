@@ -1,122 +1,327 @@
-# WebSum
+# WebSum Documentation Crawler
 
-A powerful web content extraction and summarization tool that crawls documentation pages and saves them in a structured knowledge base format.
+A powerful web crawler designed for extracting and processing documentation from websites. Built with Python and Crawl4AI, it provides flexible content extraction, markdown conversion, and media capture capabilities.
 
-## Features
+## 🚀 Quick Start
 
-- **Smart Web Crawling**: Uses Crawl4AI for efficient and accurate content extraction
-- **Markdown Processing**: Advanced markdown formatting with proper code block handling, list formatting, and link cleanup
-- **Media Support**: Captures screenshots and PDFs of documentation pages
-- **Test Mode**: Preview extracted content without saving to verify processing
-- **Duplicate Prevention**: Built-in protection against double crawling of URLs
-- **Structured Output**: Organizes content in a knowledge base format optimized for both humans and LLMs
+### Installation
 
-## Installation
+1. Clone the repository:
+```bash
+git clone https://github.com/gevans3000/websum.git
+cd websum
+```
 
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
-
 ### Basic Usage
 
+1. Simple documentation scraping:
 ```bash
-python websum.py URL [URL...] --output path/to/output
+python websum.py https://docs.example.com/page
 ```
 
-### Test Mode
-
-Preview content extraction without saving files:
-
+2. Test mode (preview without saving):
 ```bash
-python websum.py URL --test
+python websum.py https://docs.example.com/page --test --debug
 ```
 
-### Media Options
-
-Capture screenshots or PDFs:
-
+3. Capture with screenshots:
 ```bash
-python websum.py URL --media screenshots  # Capture screenshots
-python websum.py URL --media pdf          # Generate PDFs
-python websum.py URL --media all          # Both screenshots and PDFs
+python websum.py https://docs.example.com/page --media screenshots --debug
 ```
 
-### Output Format Options
+## 📚 Detailed Usage Examples
 
+### 1. Documentation Sites
+
+#### Python Documentation
 ```bash
-python websum.py URL --format standard    # Detailed output with full structure
-python websum.py URL --format condensed   # Brief overview with key points
+# Scrape Python tutorial with screenshots
+python websum.py https://docs.python.org/3/tutorial/introduction.html \
+  --media screenshots \
+  --output-dir python_docs \
+  --debug
+
+# Scrape multiple pages
+python websum.py \
+  https://docs.python.org/3/tutorial/introduction.html \
+  https://docs.python.org/3/tutorial/controlflow.html \
+  --output-dir python_docs
 ```
+
+#### Technical Documentation
+```bash
+# Crawl4AI documentation (known to work well)
+python websum.py https://docs.crawl4ai.com/core/browser-crawler-config/ --debug
+
+# MDN Web Docs
+python websum.py https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide \
+  --output-dir mdn_docs \
+  --format condensed
+```
+
+### 2. Media Handling
+
+#### Screenshot Capture
+```bash
+# High-quality screenshots
+python websum.py https://docs.example.com/page \
+  --media screenshots \
+  --output-dir docs_with_images
+
+# PDF generation (if supported)
+python websum.py https://docs.example.com/page \
+  --media pdf \
+  --output-dir docs_with_pdfs
+```
+
+#### Media Download Options
+```bash
+# Download all media types
+python websum.py https://docs.example.com/page --media all
+
+# Selective media download (configured in config.yaml)
+media:
+  download_images: true
+  download_pdfs: true
+  download_code: true
+  download_docs: true
+  save_screenshots: true
+  file_types:
+    images: [.png, .jpg, .jpeg]
+    documents: [.pdf, .doc, .docx]
+    code: [.py, .js, .java]
+```
+
+### 3. Output Formatting
+
+#### Standard Format
+```bash
+# Detailed output with full structure
+python websum.py https://docs.example.com/page \
+  --format standard \
+  --output-dir full_docs
+```
+
+#### Condensed Format
+```bash
+# Concise output for quick reference
+python websum.py https://docs.example.com/page \
+  --format condensed \
+  --output-dir quick_docs
+```
+
+## 🛠️ Developer Guide
+
+### Project Structure
+```
+websum/
+├── websum.py              # Main crawler implementation
+├── config.yaml            # Configuration settings
+├── modules/              # Helper modules
+│   ├── utils.py         # Utility functions
+│   └── config.py        # Configuration handling
+├── tests/               # Test suite
+└── output/              # Default output directory
+```
+
+### Key Components
+
+1. **CrawlResult Class**
+   - Stores crawl results and metadata
+   - Handles content processing
+   - Example extension:
+   ```python
+   class CrawlResult:
+       def __init__(self):
+           self.url = None
+           self.success = False
+           self.error = None
+           self.html = None
+           self.markdown = None
+           # Add custom fields as needed
+   ```
+
+2. **Configuration Management**
+   - Uses YAML for flexible settings
+   - Supports environment variables
+   - Example custom config:
+   ```yaml
+   # Custom crawler settings
+   crawler:
+     custom_headers:
+       User-Agent: "Your Custom User Agent"
+     cookies:
+       session: "your-session-cookie"
+   ```
+
+### Adding New Features
+
+1. **New Media Type Support**
+   ```python
+   # In websum.py
+   async def extract_media_files(result):
+       # Add new media type
+       if media_type == "new_type":
+           # Implementation
+           pass
+   ```
+
+2. **Custom Content Processing**
+   ```python
+   # In modules/utils.py
+   def process_custom_content(content):
+       # Your processing logic
+       return processed_content
+   ```
+
+3. **New Command Line Options**
+   ```python
+   # In websum.py
+   parser.add_argument('--new-option',
+                      help='Description of new option')
+   ```
+
+## 🔧 Advanced Configuration
+
+### Rate Limiting
+```yaml
+rate_limit:
+  delay_seconds: 2.0          # Base delay between requests
+  per_domain_delay: 3.0       # Domain-specific delay
+  max_requests_per_minute: 20 # Rate limit
+  cool_down_period: 30        # Cooling period if rate limit hit
+  max_retries: 3             # Retry attempts
+  backoff_factor: 2.0        # Exponential backoff multiplier
+```
+
+### Content Processing
+```yaml
+content:
+  word_count_threshold: 50    # Minimum content length
+  exclude_navigation: true    # Skip nav elements
+  clean_markdown: true       # Clean output
+  process_code_blocks: true  # Format code
+```
+
+### Memory Management
+```yaml
+crawler:
+  max_buffer_size: 1000000   # 1MB buffer
+  chunk_size: 524288        # 512KB chunks
+  stream_mode: true         # Enable streaming
+  max_concurrent: 1         # Concurrent downloads
+```
+
+## 🚨 Troubleshooting Guide
+
+### Common Issues
+
+1. **SSL Certificate Errors**
+   ```python
+   # Temporary fix in code
+   import ssl
+   ssl._create_default_https_context = ssl._create_unverified_context
+   ```
+
+2. **Memory Usage**
+   ```yaml
+   # Optimize memory in config.yaml
+   crawler:
+     stream_mode: true
+     max_concurrent: 1
+     chunk_size: 262144  # Reduce to 256KB
+   ```
+
+3. **Rate Limiting**
+   ```yaml
+   # Aggressive rate limiting
+   rate_limit:
+     delay_seconds: 5.0
+     max_requests_per_minute: 10
+   ```
 
 ### Debug Mode
-
-Enable detailed logging:
-
 ```bash
-python websum.py URL --debug
+# Full debug output
+python websum.py URL --debug --test
+
+# Save debug log
+python websum.py URL --debug 2>&1 | tee debug.log
 ```
 
-## Configuration
+## 📊 Performance Optimization
 
-The tool uses environment variables for performance optimization:
+### Best Practices
 
-- `CRAWL4AI_MAX_BUFFER_SIZE`: 1MB buffer for memory efficiency
-- `CRAWL4AI_CHUNK_SIZE`: 512KB chunks for streaming
-- `CRAWL4AI_STREAM_MODE`: Enabled by default for large pages
+1. **Memory Efficiency**
+   - Enable streaming for large pages
+   - Limit concurrent downloads
+   - Use appropriate buffer sizes
 
-## Output Structure
+2. **Network Optimization**
+   - Implement proper rate limiting
+   - Use caching when possible
+   - Handle timeouts gracefully
 
-### Knowledge Base Format
+3. **Content Processing**
+   - Filter unnecessary content
+   - Optimize markdown generation
+   - Handle media efficiently
 
-Files are saved with the following structure:
+### Example Configurations
+
+1. **High Performance**
+```yaml
+crawler:
+  max_concurrent: 2
+  stream_mode: true
+  timeout_seconds: 30
 ```
-output/
-  ├── domain.com/
-  │   ├── page-title.md           # Main content
-  │   ├── page-title.png          # Screenshot (if enabled)
-  │   └── page-title.pdf          # PDF (if enabled)
-  └── metadata.json               # Crawl metadata
+
+2. **Memory Conscious**
+```yaml
+crawler:
+  max_concurrent: 1
+  chunk_size: 262144
+  max_buffer_size: 524288
 ```
 
-### Markdown Processing
+3. **Polite Crawling**
+```yaml
+rate_limit:
+  delay_seconds: 3.0
+  per_domain_delay: 5.0
+  max_requests_per_minute: 10
+```
 
-The tool handles various markdown elements:
-- Code blocks with language detection
-- Headers with proper spacing
-- Ordered and unordered lists
-- Links with clean formatting
-- Bold and italic text
-- Images with alt text
-
-## Error Handling
-
-- Automatic retry for failed requests
-- Rate limiting to prevent server overload
-- Memory usage monitoring
-- Detailed error logging in debug mode
-
-## Dependencies
-
-- Python 3.7+
-- Crawl4AI 0.4.248+
-- Playwright for browser automation
-- BeautifulSoup4 for HTML processing
-- Other dependencies listed in requirements.txt
-
-## Known Limitations
-
-- JavaScript-heavy pages may require additional wait time
-- Some dynamic content may not be captured
-- PDF generation may vary based on page layout
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Submit a pull request
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-## License
+### Code Style
+- Follow PEP 8 guidelines
+- Use meaningful variable names
+- Add docstrings for functions
+- Comment complex logic
 
-MIT License - see LICENSE file for details
+### Testing
+```bash
+# Run test suite
+python -m pytest tests/
+
+# Run specific test
+python -m pytest tests/test_crawler.py
+```
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
